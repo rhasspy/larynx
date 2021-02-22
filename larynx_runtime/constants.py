@@ -20,6 +20,7 @@ class VocoderType(str, Enum):
 
     GRIFFIN_LIM = "griffin_lim"
     HIFI_GAN = "hifi_gan"
+    WAVEGLOW = "waveglow"
 
 
 # -----------------------------------------------------------------------------
@@ -53,6 +54,7 @@ class VocoderModelConfig:
 
     model_path: Path
     session_options: onnxruntime.SessionOptions
+    denoiser_strength: float = 0.0
 
 
 class VocoderModel(ABC):

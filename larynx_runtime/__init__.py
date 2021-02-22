@@ -34,7 +34,8 @@ def text_to_speech(
     number_converters: bool = False,
     disable_currency: bool = False,
     word_indexes: bool = False,
-) -> np.ndarray:
+    split_sentences: bool = False,
+) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
     tokenizer = gruut_lang.tokenizer
     phonemizer = gruut_lang.phonemizer
@@ -47,7 +48,7 @@ def text_to_speech(
 
         setattr(gruut_lang, "phoneme_to_id", phoneme_to_id)
 
-    sentences = list(
+    all_sentences = list(
         tokenizer.tokenize(
             text,
             number_converters=number_converters,
@@ -55,83 +56,102 @@ def text_to_speech(
         )
     )
 
-    clean_words: typing.List[str] = []
-    text_phonemes: typing.List[str] = []
+    if split_sentences:
+        # Each sentence emits a (text, audio) pair
+        sentence_groups = [all_sentences]
+    else:
+        # Only a single (text, audio) pair is emitted
+        sentence_groups = [[s] for s in all_sentences]
 
-    for sentence in sentences:
-        clean_words.extend(sentence.clean_words)
+    # Process each group of sentences.
+    # Each group emits a (text, audio) pair.
+    for sentences in sentence_groups:
+        raw_texts: typing.List[str] = []
+        clean_words: typing.List[str] = []
+        text_phonemes: typing.List[str] = []
 
-        # Phonemize each sentence
-        sentence_prons = phonemizer.phonemize(
-            sentence.tokens, word_indexes=word_indexes, word_breaks=True
-        )
+        for sentence in sentences:
+            raw_texts.append(sentence.raw_text)
+            clean_words.extend(sentence.clean_words)
 
-        # Pick first pronunciation for each word
-        first_pron = []
-        for word_prons in sentence_prons:
-            if word_prons:
-                for phoneme in word_prons[0]:
-                    if not phoneme:
-                        continue
+            # Phonemize each sentence
+            sentence_prons = phonemizer.phonemize(
+                sentence.tokens, word_indexes=word_indexes, word_breaks=True
+            )
 
-                    # Split out stress ("ˈa" -> "ˈ", "a")
-                    if gruut_ipa.IPA.is_stress(phoneme[0]):
-                        first_pron.append(phoneme[0])
-                        phoneme = phoneme[1:]
+            # Pick first pronunciation for each word
+            first_pron = []
+            for word_prons in sentence_prons:
+                if word_prons:
+                    for phoneme in word_prons[0]:
+                        if not phoneme:
+                            continue
 
-                    first_pron.append(phoneme)
+                        # Split out stress ("ˈa" -> "ˈ", "a")
+                        if gruut_ipa.IPA.is_stress(phoneme[0]):
+                            first_pron.append(phoneme[0])
+                            phoneme = phoneme[1:]
 
-        if not first_pron:
-            continue
+                        first_pron.append(phoneme)
 
-        # Ensure sentence ends with major break
-        if first_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
+            if not first_pron:
+                continue
+
+            # Ensure sentence ends with major break
+            if first_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
+                first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+
+            # Add another major break for good measure
             first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
-        # Add another major break for good measure
-        first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+            text_phonemes.extend(first_pron)
 
-        text_phonemes.extend(first_pron)
+        # ---------------------------------------------------------------------
 
-    _LOGGER.debug("Words for '%s': %s", text, clean_words)
-    _LOGGER.debug("Phonemes for '%s': %s", text, text_phonemes)
+        raw_text = tokenizer.token_join.join(raw_texts)
+        _LOGGER.debug("Words for '%s': %s", raw_text, clean_words)
+        _LOGGER.debug("Phonemes for '%s': %s", raw_text, text_phonemes)
 
-    # Convert to phoneme ids
-    phoneme_ids = np.array([phoneme_to_id[p] for p in text_phonemes])
+        # Convert to phoneme ids
+        phoneme_ids = np.array([phoneme_to_id[p] for p in text_phonemes])
 
-    # Run text to speech
-    tts_start_time = time.perf_counter()
+        # Run text to speech
+        _LOGGER.debug("Running text to speech model (%s)", tts_model.__class__.__name__)
+        tts_start_time = time.perf_counter()
 
-    mels = tts_model.phonemes_to_mels(phoneme_ids)
-    tts_end_time = time.perf_counter()
+        mels = tts_model.phonemes_to_mels(phoneme_ids)
+        tts_end_time = time.perf_counter()
 
-    _LOGGER.debug(
-        "Got mels in %s second(s) (shape=%s)", tts_end_time - tts_start_time, mels.shape
-    )
+        _LOGGER.debug(
+            "Got mels in %s second(s) (shape=%s)",
+            tts_end_time - tts_start_time,
+            mels.shape,
+        )
 
-    # Run vocoder
-    vocoder_start_time = time.perf_counter()
-    audio = vocoder_model.mels_to_audio(mels)
-    vocoder_end_time = time.perf_counter()
+        # Run vocoder
+        _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
+        vocoder_start_time = time.perf_counter()
+        audio = vocoder_model.mels_to_audio(mels)
+        vocoder_end_time = time.perf_counter()
 
-    _LOGGER.debug(
-        "Got audio in %s second(s) (shape=%s)",
-        vocoder_end_time - vocoder_start_time,
-        audio.shape,
-    )
+        _LOGGER.debug(
+            "Got audio in %s second(s) (shape=%s)",
+            vocoder_end_time - vocoder_start_time,
+            audio.shape,
+        )
 
-    audio_duration_sec = audio.shape[-1] / sample_rate
-    infer_sec = vocoder_end_time - tts_start_time
-    real_time_factor = audio_duration_sec / infer_sec
+        audio_duration_sec = audio.shape[-1] / sample_rate
+        infer_sec = vocoder_end_time - tts_start_time
+        real_time_factor = audio_duration_sec / infer_sec
 
-    _LOGGER.debug(
-        "Real-time factor: %0.2f second(s) (audio=%0.2f, infer=%0.2f)",
-        real_time_factor,
-        audio_duration_sec,
-        infer_sec,
-    )
+        _LOGGER.debug(
+            "Real-time factor: %0.2f second(s) (audio=%0.2f, infer=%0.2f)",
+            real_time_factor,
+            audio_duration_sec,
+            infer_sec,
+        )
 
-    return audio
+        yield raw_text, audio
 
 
 # -----------------------------------------------------------------------------
@@ -142,6 +162,7 @@ def load_tts_model(
     model_path: typing.Union[str, Path],
     no_optimizations: bool = False,
 ) -> TextToSpeechModel:
+    """Load the appropriate text to speech model"""
     sess_options = onnxruntime.SessionOptions()
     if no_optimizations:
         sess_options.graph_optimization_level = (
@@ -167,7 +188,9 @@ def load_vocoder_model(
     model_type: VocoderType,
     model_path: typing.Union[str, Path],
     no_optimizations: bool = False,
+    denoiser_strength: float = 0.0,
 ) -> VocoderModel:
+    """Load the appropriate vocoder model"""
     sess_options = onnxruntime.SessionOptions()
     if no_optimizations:
         sess_options.graph_optimization_level = (
@@ -175,7 +198,9 @@ def load_vocoder_model(
         )
 
     config = VocoderModelConfig(
-        model_path=Path(model_path), session_options=sess_options
+        model_path=Path(model_path),
+        session_options=sess_options,
+        denoiser_strength=denoiser_strength,
     )
 
     if model_type == VocoderType.GRIFFIN_LIM:
@@ -187,5 +212,10 @@ def load_vocoder_model(
         from .hifi_gan import HiFiGanVocoder
 
         return HiFiGanVocoder(config)
+
+    if model_type == VocoderType.WAVEGLOW:
+        from .waveglow import WaveGlowVocoder
+
+        return WaveGlowVocoder(config)
 
     raise ValueError(f"Unknown vocoder model type: {model_type}")

@@ -3,17 +3,35 @@ import argparse
 import io
 import logging
 import os
+import string
 import subprocess
 import sys
+import time
+import typing
+from enum import Enum
 from pathlib import Path
 
+import numpy as np
+
 import gruut
+import gruut_ipa
 
 from . import load_tts_model, load_vocoder_model, text_to_speech
-from .constants import VocoderType
+from .constants import TextToSpeechType, VocoderType
 from .wavfile import write as wav_write
 
 _LOGGER = logging.getLogger("larynx_runtime")
+
+# -----------------------------------------------------------------------------
+
+
+class OutputNaming(str, Enum):
+    """Format used for output file names"""
+
+    TEXT = "text"
+    TIME = "time"
+    ID = "id"
+
 
 # -----------------------------------------------------------------------------
 
@@ -22,8 +40,41 @@ def main():
     """Main entry point"""
     args = get_args()
 
+    # Create output directory
+    if args.output_dir:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.seed is not None:
+        _LOGGER.debug("Setting random seed to %s", args.seed)
+        np.random.seed(args.seed)
+
+    # Load language
     gruut_lang = gruut.Language.load(args.language)
     assert gruut_lang, f"Unsupported language: {args.language}"
+
+    # Add new words to lexicon
+    if args.new_word:
+        _LOGGER.debug("Adding %s new word(s) to lexicon", len(args.new_word))
+        lexicon = gruut_lang.phonemizer.lexicon
+        for word, ipa in args.new_word:
+            # Allow ' for primary stress and , for secondary stress
+            ipa = ipa.replace("'", gruut_ipa.IPA.STRESS_PRIMARY.value)
+            ipa = ipa.replace(",", gruut_ipa.IPA.STRESS_SECONDARY.value)
+
+            word_pron = [
+                p.text
+                for p in gruut_lang.phonemes.split(
+                    ipa, keep_stress=gruut_lang.keep_stress
+                )
+            ]
+            _LOGGER.debug("%s %s", word, " ".join(word_pron))
+            word_prons = lexicon.get(word)
+            if word_prons:
+                # Insert before other pronunciations
+                word_prons.insert(0, word_pron)
+            else:
+                # This is the only pronunication
+                lexicon[word] = [word_pron]
 
     # Load TTS
     _LOGGER.debug(
@@ -45,6 +96,7 @@ def main():
         model_type=args.vocoder_model_type,
         model_path=args.vocoder_model,
         no_optimizations=args.no_optimizations,
+        denoiser_strength=args.denoiser_strength,
     )
 
     # Read text from stdin or arguments
@@ -58,12 +110,19 @@ def main():
         if os.isatty(sys.stdin.fileno()):
             print("Reading text from stdin...", file=sys.stderr)
 
+    all_audios: typing.List[np.ndarray] = []
+    wav_data: typing.Optional[bytes] = None
+
     for line in texts:
+        line_id = ""
         line = line.strip()
         if not line:
             continue
 
-        audio = text_to_speech(
+        if args.output_naming == OutputNaming.ID:
+            line_id, line = line.split(args.id_delimiter, maxsplit=1)
+
+        text_and_audios = text_to_speech(
             text=line,
             gruut_lang=gruut_lang,
             tts_model=tts_model,
@@ -71,19 +130,69 @@ def main():
             number_converters=args.number_converters,
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
+            split_sentences=args.split_sentences,
         )
 
+        text_id = ""
+
+        for text_idx, (text, audio) in enumerate(text_and_audios):
+            if args.interactive or args.output_dir:
+                # Convert to WAV audio
+                with io.BytesIO() as wav_io:
+                    wav_write(wav_io, args.sample_rate, audio)
+                    wav_data = wav_io.getvalue()
+
+                assert wav_data is not None
+
+                if args.interactive:
+
+                    # Play audio
+                    subprocess.run(
+                        ["play", "-"],
+                        input=wav_data,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=True,
+                    )
+
+                if args.output_dir:
+                    # Determine file name
+                    if args.output_naming == OutputNaming.TEXT:
+                        # Use text itself
+                        file_name = text.replace(" ", "_")
+                        file_name = file_name.translate(
+                            str.maketrans("", "", string.punctuation.replace("_", ""))
+                        )
+                    elif args.output_naming == OutputNaming.TIME:
+                        # Use timestamp
+                        file_name = str(time.time())
+                    elif args.output_naming == OutputNaming.ID:
+                        if not text_id:
+                            text_id = line_id
+                        else:
+                            text_id = f"{line_id}_{text_idx + 1}"
+
+                        file_name = text_id
+
+                    assert file_name, f"No file name for text: {text}"
+                    wav_path = args.output_dir / (file_name + ".wav")
+                    with open(wav_path, "wb") as wav_file:
+                        wav_write(wav_file, args.sample_rate, audio)
+
+                    _LOGGER.debug("Wrote %s", wav_path)
+            else:
+                # Combine all audio and output to stdout at the end
+                all_audios.append(audio)
+
+    # -------------------------------------------------------------------------
+
+    # Write combined audio to stdout
+    if all_audios:
         with io.BytesIO() as wav_io:
-            wav_write(wav_io, 22050, audio)
+            wav_write(wav_io, args.sample_rate, np.concatenate(all_audios))
             wav_data = wav_io.getvalue()
 
-        subprocess.run(
-            ["play", "-t", "wav", "-"],
-            input=wav_data,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True,
-        )
+        sys.stdout.buffer.write(wav_data)
 
 
 # -----------------------------------------------------------------------------
@@ -96,6 +205,25 @@ def get_args():
     parser.add_argument(
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
     )
+    parser.add_argument("--output-dir", help="Directory to write WAV file(s)")
+    parser.add_argument(
+        "--output-naming",
+        choices=[v.value for v in OutputNaming],
+        default="text",
+        help="Naming scheme for output WAV files (requires --output-dir)",
+    )
+    parser.add_argument(
+        "--id-delimiter",
+        default="|",
+        help="Delimiter between id and text in lines (default: |). Requires --output-naming id",
+    )
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Play audio after each input line (requires 'play')",
+    )
+    parser.add_argument("--csv", action="store_true", help="Input format is id|text")
+    parser.add_argument("--sample-rate", type=int, default=22050)
 
     # Gruut
     parser.add_argument(
@@ -113,6 +241,17 @@ def get_args():
         action="store_true",
         help="Allow number_conv form for specifying num2words converter (cardinal, ordinal, ordinal_num, year, currency)",
     )
+    parser.add_argument(
+        "--split-sentences",
+        action="store_true",
+        help="Automatically split sentences into different audio files",
+    )
+    parser.add_argument(
+        "--new-word",
+        nargs=2,
+        action="append",
+        help="Add IPA pronunciation for word (word IPA)",
+    )
 
     # TTS models
     parser.add_argument(
@@ -122,11 +261,20 @@ def get_args():
 
     # Vocoder models
     parser.add_argument("--hifi-gan", help="Path to HiFi-GAN onnx generator model")
+    parser.add_argument("--waveglow", help="Path to WaveGlow onnx model")
 
-    parser.add_argument("--csv", action="store_true", help="Input format is id|text")
     parser.add_argument(
         "--no-optimizations", action="store_true", help="Disable Onnx optimizations"
     )
+    parser.add_argument(
+        "--denoiser-strength",
+        type=float,
+        default=0.0,
+        help="Strength of denoiser, if available (default: 0 = disabled)",
+    )
+
+    # Miscellaneous
+    parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
     parser.add_argument(
         "--debug", action="store_true", help="Print DEBUG messages to the console"
     )
@@ -138,7 +286,7 @@ def get_args():
         logging.basicConfig(level=logging.INFO)
 
     # Ensure TTS model
-    tts_model_args = ["tacotron2"]
+    tts_model_args = [v.value for v in TextToSpeechType]
     setattr(args, "tts_model_type", None)
     setattr(args, "tts_model", None)
 
@@ -155,7 +303,7 @@ def get_args():
         raise ValueError("A TTS model is required")
 
     # Check for vocoder model
-    vocoder_model_args = ["hifi_gan"]
+    vocoder_model_args = [v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM]
     setattr(args, "vocoder_model_type", None)
     setattr(args, "vocoder_model", None)
 
@@ -177,6 +325,9 @@ def get_args():
         # Default to griffin-lim vocoder
         args.vocoder_model = Path.cwd()
         args.vocoder_model_type = VocoderType.GRIFFIN_LIM
+
+    if args.output_dir:
+        args.output_dir = Path(args.output_dir)
 
     _LOGGER.debug(args)
 
