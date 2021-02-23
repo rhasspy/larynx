@@ -145,7 +145,7 @@ def text_to_speech(
         real_time_factor = audio_duration_sec / infer_sec
 
         _LOGGER.debug(
-            "Real-time factor: %0.2f second(s) (audio=%0.2f, infer=%0.2f)",
+            "Real-time factor: %0.2f (audio=%0.2f sec, infer=%0.2f sec)",
             real_time_factor,
             audio_duration_sec,
             infer_sec,
