@@ -13,6 +13,7 @@ class TextToSpeechType(str, Enum):
     """Available text to speech model types"""
 
     TACOTRON2 = "tacotron2"
+    GLOW_TTS = "glow_tts"
 
 
 class VocoderType(str, Enum):

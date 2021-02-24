@@ -258,6 +258,7 @@ def get_args():
         "--tacotron2",
         help="Path to directory with encoder/decoder/postnet onnx Tacotron2 models",
     )
+    parser.add_argument("--glow-tts", help="Path to onnx Glow TTS model")
 
     # Vocoder models
     parser.add_argument("--hifi-gan", help="Path to HiFi-GAN onnx generator model")

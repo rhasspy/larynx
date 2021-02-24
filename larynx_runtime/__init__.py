@@ -178,6 +178,11 @@ def load_tts_model(
 
         return Tacotron2TextToSpeech(config)
 
+    if model_type == TextToSpeechType.GLOW_TTS:
+        from .glow_tts import GlowTextToSpeech
+
+        return GlowTextToSpeech(config)
+
     raise ValueError(f"Unknown text to speech model type: {model_type}")
 
 
