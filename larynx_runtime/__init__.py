@@ -35,6 +35,8 @@ def text_to_speech(
     disable_currency: bool = False,
     word_indexes: bool = False,
     split_sentences: bool = False,
+    tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
 ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
     tokenizer = gruut_lang.tokenizer
@@ -61,7 +63,7 @@ def text_to_speech(
         sentence_groups = [all_sentences]
     else:
         # Only a single (text, audio) pair is emitted
-        sentence_groups = [[s] for s in all_sentences]
+        sentence_groups = [[s for s in all_sentences]]
 
     # Process each group of sentences.
     # Each group emits a (text, audio) pair.
@@ -119,7 +121,7 @@ def text_to_speech(
         _LOGGER.debug("Running text to speech model (%s)", tts_model.__class__.__name__)
         tts_start_time = time.perf_counter()
 
-        mels = tts_model.phonemes_to_mels(phoneme_ids)
+        mels = tts_model.phonemes_to_mels(phoneme_ids, settings=tts_settings)
         tts_end_time = time.perf_counter()
 
         _LOGGER.debug(
@@ -131,7 +133,7 @@ def text_to_speech(
         # Run vocoder
         _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
         vocoder_start_time = time.perf_counter()
-        audio = vocoder_model.mels_to_audio(mels)
+        audio = vocoder_model.mels_to_audio(mels, settings=vocoder_settings)
         vocoder_end_time = time.perf_counter()
 
         _LOGGER.debug(

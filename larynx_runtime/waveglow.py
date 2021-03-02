@@ -5,7 +5,7 @@ import numpy as np
 import onnxruntime
 
 from .audio import inverse, transform
-from .constants import VocoderModel, VocoderModelConfig
+from .constants import SettingsType, VocoderModel, VocoderModelConfig
 
 _LOGGER = logging.getLogger("waveglow")
 
@@ -44,7 +44,9 @@ class WaveGlowVocoder(VocoderModel):
 
             self.bias_spec = bias_spec[:, :, 0][:, :, None]
 
-    def mels_to_audio(self, mels: np.ndarray) -> np.ndarray:
+    def mels_to_audio(
+        self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
+    ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
         z = self.make_z(mels)
         audio = self.waveglow.run(None, {"mel": mels, "z": z})[0]

@@ -1,3 +1,4 @@
+import typing
 from abc import ABC
 from dataclasses import dataclass
 from enum import Enum
@@ -24,6 +25,8 @@ class VocoderType(str, Enum):
     WAVEGLOW = "waveglow"
 
 
+SettingsType = typing.Dict[str, typing.Any]
+
 # -----------------------------------------------------------------------------
 
 
@@ -41,7 +44,9 @@ class TextToSpeechModel(ABC):
     def __init__(self, config: TextToSpeechModelConfig):
         pass
 
-    def phonemes_to_mels(self, phoneme_ids: np.ndarray) -> np.ndarray:
+    def phonemes_to_mels(
+        self, phoneme_ids: np.ndarray, settings: typing.Optional[SettingsType] = None
+    ) -> np.ndarray:
         """Convert phoneme ids to mel spectrograms"""
         pass
 
@@ -64,6 +69,8 @@ class VocoderModel(ABC):
     def __init__(self, config: VocoderModelConfig):
         pass
 
-    def mels_to_audio(self, mels: np.ndarray) -> np.ndarray:
+    def mels_to_audio(
+        self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
+    ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
         pass

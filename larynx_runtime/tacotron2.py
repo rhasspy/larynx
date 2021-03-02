@@ -1,9 +1,10 @@
 import logging
+import typing
 
 import numpy as np
 import onnxruntime
 
-from .constants import TextToSpeechModel, TextToSpeechModelConfig
+from .constants import SettingsType, TextToSpeechModel, TextToSpeechModelConfig
 
 _LOGGER = logging.getLogger("tacotron2")
 
@@ -41,7 +42,9 @@ class Tacotron2TextToSpeech(TextToSpeechModel):
 
     # -------------------------------------------------------------------------
 
-    def phonemes_to_mels(self, phoneme_ids: np.ndarray) -> np.ndarray:
+    def phonemes_to_mels(
+        self, phoneme_ids: np.ndarray, settings: typing.Optional[SettingsType] = None
+    ) -> np.ndarray:
         """Convert phoneme ids to mel spectrograms"""
         # Convert to tensors
         # TODO: Allow batches
