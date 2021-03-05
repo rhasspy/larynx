@@ -85,7 +85,7 @@ def text_to_speech(
             first_pron = []
             for word_prons in sentence_prons:
                 if word_prons:
-                    for phoneme in word_prons[0]:
+                    for phoneme in word_prons[0].phonemes:
                         if not phoneme:
                             continue
 

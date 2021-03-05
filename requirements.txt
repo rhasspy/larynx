@@ -1,3 +1,3 @@
-gruut>=0.6.0
+gruut>=0.8.0
 numpy>=1.16.6
 onnxruntime==1.6.0
