@@ -1,7 +1,9 @@
+import typing
+
 import numpy as np
 
 from .audio import dynamic_range_decompression, inverse, mel_basis, transform
-from .constants import VocoderModel, VocoderModelConfig
+from .constants import SettingsType, VocoderModel, VocoderModelConfig
 
 # -----------------------------------------------------------------------------
 
@@ -24,7 +26,9 @@ class GriffinLimVocoder(VocoderModel):
         self.mel_scaling = mel_scaling
         self.iterations = iterations
 
-    def mels_to_audio(self, mels: np.ndarray) -> np.ndarray:
+    def mels_to_audio(
+        self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
+    ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
         mel_decompress = dynamic_range_decompression(mels).squeeze(0)
         mel_decompress = mel_decompress.transpose()
