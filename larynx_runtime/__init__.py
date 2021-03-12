@@ -1,3 +1,4 @@
+import itertools
 import logging
 import time
 import typing
@@ -37,18 +38,28 @@ def text_to_speech(
     split_sentences: bool = False,
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    native_lang: typing.Optional[gruut.Language] = None,
 ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
     tokenizer = gruut_lang.tokenizer
     phonemizer = gruut_lang.phonemizer
 
-    phoneme_to_id = getattr(gruut_lang, "phoneme_to_id", None)
+    accent_map: typing.Optional[typing.Dict[str, typing.List[str]]] = None
+    if native_lang:
+        # Use native language phonemes
+        accent_map = gruut_lang.accents[native_lang.language]
+        phoneme_lang = native_lang
+    else:
+        # Use original language phonemes
+        phoneme_lang = gruut_lang
+
+    phoneme_to_id = getattr(phoneme_lang, "phoneme_to_id", None)
     if phoneme_to_id is None:
-        phonemes_list = gruut_lang.id_to_phonemes()
+        phonemes_list = phoneme_lang.id_to_phonemes()
         phoneme_to_id = {p: i for i, p in enumerate(phonemes_list)}
         _LOGGER.debug(phoneme_to_id)
 
-        setattr(gruut_lang, "phoneme_to_id", phoneme_to_id)
+        setattr(phoneme_lang, "phoneme_to_id", phoneme_to_id)
 
     all_sentences = list(
         tokenizer.tokenize(
@@ -60,10 +71,10 @@ def text_to_speech(
 
     if split_sentences:
         # Each sentence emits a (text, audio) pair
-        sentence_groups = [all_sentences]
+        sentence_groups = [[s] for s in all_sentences]
     else:
         # Only a single (text, audio) pair is emitted
-        sentence_groups = [[s for s in all_sentences]]
+        sentence_groups = [all_sentences]
 
     # Process each group of sentences.
     # Each group emits a (text, audio) pair.
@@ -90,7 +101,12 @@ def text_to_speech(
                             continue
 
                         # Split out stress ("ˈa" -> "ˈ", "a")
-                        if gruut_ipa.IPA.is_stress(phoneme[0]):
+                        # Loop because languages like Swedish can have multiple
+                        # accents on a single phoneme.
+                        while phoneme and (
+                            gruut_ipa.IPA.is_stress(phoneme[0])
+                            or gruut_ipa.IPA.is_accent(phoneme[0])
+                        ):
                             first_pron.append(phoneme[0])
                             phoneme = phoneme[1:]
 
@@ -106,7 +122,14 @@ def text_to_speech(
             # Add another major break for good measure
             first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
-            text_phonemes.extend(first_pron)
+            if accent_map:
+                # Map to different phoneme set
+                text_phonemes.extend(
+                    itertools.chain(*[accent_map.get(p, p) for p in first_pron])
+                )
+            else:
+                # Use original phoneme set
+                text_phonemes.extend(first_pron)
 
         # ---------------------------------------------------------------------
 

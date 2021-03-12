@@ -52,6 +52,16 @@ def main():
     gruut_lang = gruut.Language.load(args.language)
     assert gruut_lang, f"Unsupported language: {args.language}"
 
+    # Verify accent make is available
+    native_lang: typing.Optional[gruut.Language] = None
+    if args.native_language:
+        assert (
+            args.native_language in gruut_lang.accents
+        ), "No accent map for f{args.native_language}"
+
+        native_lang = gruut.Language.load(args.native_language)
+        assert native_lang, f"Unsupported language: {args.native_language}"
+
     # Add new words to lexicon
     if args.new_word:
         _LOGGER.debug("Adding %s new word(s) to lexicon", len(args.new_word))
@@ -131,6 +141,7 @@ def main():
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
             split_sentences=args.split_sentences,
+            native_lang=native_lang,
         )
 
         text_id = ""
@@ -272,6 +283,11 @@ def get_args():
         type=float,
         default=0.0,
         help="Strength of denoiser, if available (default: 0 = disabled)",
+    )
+
+    # Accent
+    parser.add_argument(
+        "--native-language", help="Native language of speaker (accented speech)"
     )
 
     # Miscellaneous
