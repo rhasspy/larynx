@@ -28,6 +28,7 @@ class WaveGlowVocoder(VocoderModel):
         self.mel_channels = 80
         self.wn_channels = 256
         self.wn_layers = 8
+        self.max_wav_value = 32768.0
 
         # Initialize denoiser
         self.denoiser_strength = config.denoiser_strength
@@ -56,6 +57,8 @@ class WaveGlowVocoder(VocoderModel):
             audio = self.denoise(audio)
 
         audio = audio.squeeze(0)
+        audio = audio * self.max_wav_value
+        audio = audio.astype("int16")
 
         return audio
 
