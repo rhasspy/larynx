@@ -183,7 +183,7 @@ def text_to_speech(
 
 
 def load_tts_model(
-    model_type: TextToSpeechType,
+    model_type: typing.Union[str, TextToSpeechType],
     model_path: typing.Union[str, Path],
     no_optimizations: bool = False,
 ) -> TextToSpeechModel:
@@ -215,7 +215,7 @@ def load_tts_model(
 
 
 def load_vocoder_model(
-    model_type: VocoderType,
+    model_type: typing.Union[str, VocoderType],
     model_path: typing.Union[str, Path],
     no_optimizations: bool = False,
     denoiser_strength: float = 0.0,
