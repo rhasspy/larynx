@@ -48,6 +48,9 @@ def main():
         _LOGGER.debug("Setting random seed to %s", args.seed)
         np.random.seed(args.seed)
 
+    if args.csv:
+        args.output_naming = "id"
+
     # Load language
     gruut_lang = gruut.Language.load(args.language)
     assert gruut_lang, f"Unsupported language: {args.language}"

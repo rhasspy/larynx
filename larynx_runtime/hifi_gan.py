@@ -17,9 +17,17 @@ class HiFiGanVocoder(VocoderModel):
         super(HiFiGanVocoder, self).__init__(config)
         self.config = config
 
-        _LOGGER.debug("Loading HiFi-GAN model from %s", config.model_path)
+        # Load model
+        if config.model_path.is_file():
+            # Model path is a file
+            generator_path = config.model_path
+        else:
+            # Model path is a directory
+            generator_path = config.model_path / "generator.onnx"
+
+        _LOGGER.debug("Loading HiFi-GAN model from %s", generator_path)
         self.generator = onnxruntime.InferenceSession(
-            str(config.model_path), sess_options=config.session_options
+            str(generator_path), sess_options=config.session_options
         )
 
         self.mel_channels = 80
@@ -40,7 +48,9 @@ class HiFiGanVocoder(VocoderModel):
 
         denoiser_strength = self.denoiser_strength
         if settings:
-            denoiser_strength = settings.get("denoiser_strength", denoiser_strength)
+            denoiser_strength = float(
+                settings.get("denoiser_strength", denoiser_strength)
+            )
 
         if denoiser_strength > 0:
             self.maybe_init_denoiser()

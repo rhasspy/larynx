@@ -17,9 +17,16 @@ class GlowTextToSpeech(TextToSpeechModel):
         sess_options = config.session_options
 
         # Load model
-        _LOGGER.debug("Loading model from %s", config.model_path)
+        if config.model_path.is_file():
+            # Model path is a file
+            generator_path = config.model_path
+        else:
+            # Model path is a directory
+            generator_path = config.model_path / "generator.onnx"
+
+        _LOGGER.debug("Loading model from %s", generator_path)
         self.model = onnxruntime.InferenceSession(
-            str(config.model_path), sess_options=sess_options
+            str(generator_path), sess_options=sess_options
         )
 
         self.noise_scale = 0.333
@@ -40,8 +47,8 @@ class GlowTextToSpeech(TextToSpeechModel):
         length_scale = self.length_scale
 
         if settings:
-            noise_scale = settings.get("noise_scale", noise_scale)
-            length_scale = settings.get("length_scale", length_scale)
+            noise_scale = float(settings.get("noise_scale", noise_scale))
+            length_scale = float(settings.get("length_scale", length_scale))
 
         scales = np.array([noise_scale, length_scale], dtype=np.float32)
 

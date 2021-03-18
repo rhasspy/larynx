@@ -17,9 +17,16 @@ class WaveGlowVocoder(VocoderModel):
         super(WaveGlowVocoder, self).__init__(config)
         self.config = config
 
-        _LOGGER.debug("Loading WaveGlow model from %s", config.model_path)
+        if config.model_path.is_file():
+            # Model path is a file
+            generator_path = config.model_path
+        else:
+            # Model path is a directory
+            generator_path = config.model_path / "generator.onnx"
+
+        _LOGGER.debug("Loading WaveGlow model from %s", generator_path)
         self.waveglow = onnxruntime.InferenceSession(
-            str(config.model_path), sess_options=config.session_options
+            str(generator_path), sess_options=config.session_options
         )
 
         self.filter_length = 1024
@@ -35,15 +42,7 @@ class WaveGlowVocoder(VocoderModel):
         self.bias_spec: typing.Optional[np.ndarray] = None
 
         if self.denoiser_strength > 0:
-            _LOGGER.debug("Initializing denoiser")
-            mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
-            z = self.make_z(mel_zeros)
-            bias_audio = self.waveglow.run(None, {"mel": mel_zeros, "z": z})[0].astype(
-                np.float32
-            )
-            bias_spec, _ = transform(bias_audio)
-
-            self.bias_spec = bias_spec[:, :, 0][:, :, None]
+            self.maybe_init_denoiser()
 
     def mels_to_audio(
         self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
@@ -52,8 +51,14 @@ class WaveGlowVocoder(VocoderModel):
         z = self.make_z(mels)
         audio = self.waveglow.run(None, {"mel": mels, "z": z})[0]
 
-        if self.denoiser_strength > 0:
-            _LOGGER.debug("Running denoiser (strength=%s)", self.denoiser_strength)
+        if settings:
+            denoiser_strength = float(
+                settings.get("denoiser_strength", self.denoiser_strength)
+            )
+
+        if denoiser_strength > 0:
+            self.maybe_init_denoiser()
+            _LOGGER.debug("Running denoiser (strength=%s)", denoiser_strength)
             audio = self.denoise(audio)
 
         audio = audio.squeeze(0)
@@ -77,3 +82,15 @@ class WaveGlowVocoder(VocoderModel):
         audio_denoised = inverse(audio_spec_denoised, audio_angles)
 
         return audio_denoised
+
+    def maybe_init_denoiser(self):
+        if self.bias_spec is None:
+            _LOGGER.debug("Initializing denoiser")
+            mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
+            z = self.make_z(mel_zeros)
+            bias_audio = self.waveglow.run(None, {"mel": mel_zeros, "z": z})[0].astype(
+                np.float32
+            )
+            bias_spec, _ = transform(bias_audio)
+
+            self.bias_spec = bias_spec[:, :, 0][:, :, None]
