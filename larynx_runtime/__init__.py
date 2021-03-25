@@ -152,10 +152,6 @@ def text_to_speech(
             mels.shape,
         )
 
-        if audio_settings.signal_norm:
-            # Denormalize mels
-            mels = audio_settings.denormalize(mels)
-
         # Do denormalization, etc.
         if audio_settings.signal_norm:
             mels = audio_settings.denormalize(mels)
