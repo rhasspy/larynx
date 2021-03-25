@@ -4,7 +4,7 @@ import typing
 import numpy as np
 import onnxruntime
 
-from .audio import inverse, transform
+from .audio import audio_float_to_int16, inverse, transform
 from .constants import SettingsType, VocoderModel, VocoderModelConfig
 
 _LOGGER = logging.getLogger("waveglow")
@@ -61,11 +61,8 @@ class WaveGlowVocoder(VocoderModel):
             _LOGGER.debug("Running denoiser (strength=%s)", denoiser_strength)
             audio = self.denoise(audio)
 
-        audio = audio.squeeze(0)
-        audio = audio * self.max_wav_value
-        audio = audio.astype("int16")
-
-        return audio
+        audio_norm = audio_float_to_int16(audio)
+        return audio_norm.squeeze(0)
 
     def make_z(self, mels: np.ndarray) -> np.ndarray:
         z_size2 = (mels.shape[2] * self.wn_channels) // self.wn_layers

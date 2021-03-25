@@ -16,7 +16,116 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 # -----------------------------------------------------------------------------
 
+import typing
+from dataclasses import dataclass
+
 import numpy as np
+
+
+@dataclass
+class AudioSettings:
+    """Settings for mel denormalization"""
+
+    # STFT settings
+    filter_length: int = 1024
+    hop_length: int = 256
+    win_length: int = 256
+    mel_channels: int = 80
+    sample_rate: int = 22050
+    sample_bytes: int = 2
+    channels: int = 1
+    mel_fmin: float = 0.0
+    mel_fmax: typing.Optional[float] = 8000.0
+    ref_level_db: float = 20.0
+    spec_gain: float = 1.0
+
+    # Normalization
+    signal_norm: bool = False
+    min_level_db: float = -100.0
+    max_norm: float = 4.0
+    clip_norm: bool = True
+    symmetric_norm: bool = True
+    do_dynamic_range_compression: bool = True
+    convert_db_to_amp: bool = True
+
+    # -------------------------------------------------------------------------
+    # Mel Spectrogram
+    # -------------------------------------------------------------------------
+
+    def amp_to_db(self, mel_amp: np.ndarray) -> np.ndarray:
+        return self.spec_gain * np.log10(np.maximum(1e-5, mel_amp))
+
+    def db_to_amp(self, mel_db: np.ndarray) -> np.ndarray:
+        return np.power(10.0, mel_db / self.spec_gain)
+
+    # -------------------------------------------------------------------------
+    # Normalization
+    # -------------------------------------------------------------------------
+
+    def normalize(self, mel_db: np.ndarray) -> np.ndarray:
+        """Put values in [0, max_norm] or [-max_norm, max_norm]"""
+        mel_norm = ((mel_db - self.ref_level_db) - self.min_level_db) / (
+            -self.min_level_db
+        )
+        if self.symmetric_norm:
+            # Symmetric norm
+            mel_norm = ((2 * self.max_norm) * mel_norm) - self.max_norm
+            if self.clip_norm:
+                mel_norm = np.clip(mel_norm, -self.max_norm, self.max_norm)
+        else:
+            # Asymmetric norm
+            mel_norm = self.max_norm * mel_norm
+            if self.clip_norm:
+                mel_norm = np.clip(mel_norm, 0, self.max_norm)
+
+        return mel_norm
+
+    def denormalize(self, mel_db: np.ndarray) -> np.ndarray:
+        """Pull values out of [0, max_norm] or [-max_norm, max_norm]"""
+        if self.symmetric_norm:
+            # Symmetric norm
+            if self.clip_norm:
+                mel_denorm = np.clip(mel_db, -self.max_norm, self.max_norm)
+
+            mel_denorm = (
+                (mel_denorm + self.max_norm) * -self.min_level_db / (2 * self.max_norm)
+            ) + self.min_level_db
+        else:
+            # Asymmetric norm
+            if self.clip_norm:
+                mel_denorm = np.clip(mel_db, 0, self.max_norm)
+
+            mel_denorm = (
+                mel_denorm * -self.min_level_db / self.max_norm
+            ) + self.min_level_db
+
+        mel_denorm += self.ref_level_db
+
+        return typing.cast(np.ndarray, mel_denorm)
+
+    def dynamic_range_compression(self, x, C=1, clip_val=1e-5):
+        """Compression function from hifi-gan training"""
+        return np.log(np.clip(x, a_min=clip_val, a_max=None) * C)
+
+    def dynamic_range_decompression(self, x, C=1):
+        """Decompression function from hifi-gan training"""
+        return np.exp(x) / C
+
+
+# -----------------------------------------------------------------------------
+
+
+def audio_float_to_int16(
+    audio: np.ndarray, max_wav_value: float = 32767.0
+) -> np.ndarray:
+    """Normalize audio and convert to int16 range"""
+    audio_norm = audio * (max_wav_value / max(0.01, np.max(np.abs(audio))))
+    audio_norm = np.clip(audio_norm, -max_wav_value, max_wav_value)
+    audio_norm = audio_norm.astype("int16")
+    return audio_norm
+
+
+# -----------------------------------------------------------------------------
 
 
 def mel_basis(sr, n_fft, n_mels=80, fmin=0.0, fmax=None, dtype=np.float32):

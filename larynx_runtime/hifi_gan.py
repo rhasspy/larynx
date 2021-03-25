@@ -4,7 +4,7 @@ import typing
 import numpy as np
 import onnxruntime
 
-from .audio import inverse, transform
+from .audio import audio_float_to_int16, inverse, transform
 from .constants import SettingsType, VocoderModel, VocoderModelConfig
 
 _LOGGER = logging.getLogger("hifi_gan")
@@ -31,7 +31,6 @@ class HiFiGanVocoder(VocoderModel):
         )
 
         self.mel_channels = 80
-        self.max_wav_value = 32768.0
 
         # Initialize denoiser
         self.denoiser_strength = config.denoiser_strength
@@ -57,10 +56,8 @@ class HiFiGanVocoder(VocoderModel):
             _LOGGER.debug("Running denoiser (strength=%s)", denoiser_strength)
             audio = self.denoise(audio, denoiser_strength)
 
-        audio = audio * self.max_wav_value
-        audio = audio.astype("int16")
-
-        return audio.squeeze(0)
+        audio_norm = audio_float_to_int16(audio)
+        return audio_norm.squeeze(0)
 
     def denoise(self, audio: np.ndarray, denoiser_strength: float) -> np.ndarray:
         assert self.bias_spec is not None

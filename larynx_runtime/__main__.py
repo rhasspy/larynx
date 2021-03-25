@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import io
+import json
 import logging
 import os
 import string
@@ -17,6 +18,7 @@ import gruut
 import gruut_ipa
 
 from . import load_tts_model, load_vocoder_model, text_to_speech
+from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
 from .wavfile import write as wav_write
 
@@ -39,6 +41,26 @@ class OutputNaming(str, Enum):
 def main():
     """Main entry point"""
     args = get_args()
+
+    # Load audio settings
+    maybe_config_path: typing.Optional[Path] = None
+    if args.config:
+        maybe_config_path = args.config
+    elif not args.no_autoload_config:
+        maybe_config_path = args.tts_model / "config.json"
+        if not maybe_config_path.is_file():
+            maybe_config_path = None
+
+    if maybe_config_path is not None:
+        _LOGGER.debug("Loading audio settings from %s", maybe_config_path)
+        with open(maybe_config_path, "r") as config_file:
+            config = json.load(config_file)
+            audio_settings = AudioSettings(**config["audio"])
+    else:
+        # Default audio settings
+        audio_settings = AudioSettings()
+
+    _LOGGER.debug(audio_settings)
 
     # Create output directory
     if args.output_dir:
@@ -140,6 +162,7 @@ def main():
             gruut_lang=gruut_lang,
             tts_model=tts_model,
             vocoder_model=vocoder_model,
+            audio_settings=audio_settings,
             number_converters=args.number_converters,
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
@@ -215,9 +238,14 @@ def main():
 def get_args():
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(prog="larynx-runtime")
-    parser.add_argument("language", help="Gruut language for text input")
+    parser.add_argument(
+        "--language", required=True, help="Gruut language for text input"
+    )
     parser.add_argument(
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
+    )
+    parser.add_argument(
+        "--config", help="Path to JSON configuration file with audio settings"
     )
     parser.add_argument("--output-dir", help="Directory to write WAV file(s)")
     parser.add_argument(
@@ -294,6 +322,11 @@ def get_args():
     )
 
     # Miscellaneous
+    parser.add_argument(
+        "--no-autoload-config",
+        action="store_true",
+        help="Don't automatically load config.json in model directory",
+    )
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
     parser.add_argument(
         "--debug", action="store_true", help="Print DEBUG messages to the console"
@@ -348,6 +381,9 @@ def get_args():
 
     if args.output_dir:
         args.output_dir = Path(args.output_dir)
+
+    if args.config:
+        args.config = Path(args.config)
 
     _LOGGER.debug(args)
 

@@ -10,6 +10,7 @@ import onnxruntime
 import gruut
 import gruut_ipa
 
+from .audio import AudioSettings
 from .constants import (
     TextToSpeechModel,
     TextToSpeechModelConfig,
@@ -23,15 +24,13 @@ _LOGGER = logging.getLogger("larynx_runtime")
 
 # -----------------------------------------------------------------------------
 
-# TODO: Variablize sample rate
-
 
 def text_to_speech(
     text: str,
     gruut_lang: gruut.Language,
     tts_model: TextToSpeechModel,
     vocoder_model: VocoderModel,
-    sample_rate: int = 22050,
+    audio_settings: AudioSettings,
     number_converters: bool = False,
     disable_currency: bool = False,
     word_indexes: bool = False,
@@ -153,6 +152,20 @@ def text_to_speech(
             mels.shape,
         )
 
+        if audio_settings.signal_norm:
+            # Denormalize mels
+            mels = audio_settings.denormalize(mels)
+
+        # Do denormalization, etc.
+        if audio_settings.signal_norm:
+            mels = audio_settings.denormalize(mels)
+
+        if audio_settings.convert_db_to_amp:
+            mels = audio_settings.db_to_amp(mels)
+
+        if audio_settings.do_dynamic_range_compression:
+            mels = audio_settings.dynamic_range_compression(mels)
+
         # Run vocoder
         _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
         vocoder_start_time = time.perf_counter()
@@ -165,7 +178,7 @@ def text_to_speech(
             audio.shape,
         )
 
-        audio_duration_sec = audio.shape[-1] / sample_rate
+        audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
         infer_sec = vocoder_end_time - tts_start_time
         real_time_factor = audio_duration_sec / infer_sec
 
