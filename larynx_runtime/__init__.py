@@ -2,6 +2,7 @@ import itertools
 import logging
 import time
 import typing
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -34,10 +35,10 @@ def text_to_speech(
     number_converters: bool = False,
     disable_currency: bool = False,
     word_indexes: bool = False,
-    split_sentences: bool = False,
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     native_lang: typing.Optional[gruut.Language] = None,
+    max_workers: typing.Optional[int] = 2,
 ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
     tokenizer = gruut_lang.tokenizer
@@ -68,24 +69,10 @@ def text_to_speech(
         )
     )
 
-    if split_sentences:
-        # Each sentence emits a (text, audio) pair
-        sentence_groups = [[s] for s in all_sentences]
-    else:
-        # Only a single (text, audio) pair is emitted
-        sentence_groups = [all_sentences]
-
-    # Process each group of sentences.
-    # Each group emits a (text, audio) pair.
-    for sentences in sentence_groups:
-        raw_texts: typing.List[str] = []
-        clean_words: typing.List[str] = []
-        text_phonemes: typing.List[str] = []
-
-        for sentence in sentences:
-            raw_texts.append(sentence.raw_text)
-            clean_words.extend(sentence.clean_words)
-
+    # Process sentences in separate threads concurrently
+    futures = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for sentence in all_sentences:
             # Phonemize each sentence
             sentence_prons = phonemizer.phonemize(
                 sentence.tokens, word_indexes=word_indexes, word_breaks=True
@@ -112,6 +99,7 @@ def text_to_speech(
                         first_pron.append(phoneme)
 
             if not first_pron:
+                # No phonemes
                 continue
 
             # Ensure sentence ends with major break
@@ -121,71 +109,96 @@ def text_to_speech(
             # Add another major break for good measure
             first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
+            text_phonemes: typing.Iterable[str] = first_pron
+
             if accent_map:
                 # Map to different phoneme set
-                text_phonemes.extend(
-                    itertools.chain(*[accent_map.get(p, p) for p in first_pron])
+                text_phonemes = itertools.chain(
+                    *[accent_map.get(p, p) for p in first_pron]
                 )
-            else:
-                # Use original phoneme set
-                text_phonemes.extend(first_pron)
+
+            # ---------------------------------------------------------------------
+
+            _LOGGER.debug("Words for '%s': %s", sentence.raw_text, sentence.clean_words)
+            _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
+
+            # Convert to phoneme ids
+            phoneme_ids = np.array([phoneme_to_id[p] for p in text_phonemes])
+
+            future = executor.submit(
+                _sentence_task,
+                phoneme_ids,
+                audio_settings,
+                tts_model,
+                tts_settings,
+                vocoder_model,
+                vocoder_settings,
+            )
+            futures[future] = sentence.raw_text
 
         # ---------------------------------------------------------------------
 
-        raw_text = tokenizer.token_join.join(raw_texts)
-        _LOGGER.debug("Words for '%s': %s", raw_text, clean_words)
-        _LOGGER.debug("Phonemes for '%s': %s", raw_text, text_phonemes)
+        for future, raw_text in futures.items():
+            audio = future.result()
+            yield raw_text, audio
 
-        # Convert to phoneme ids
-        phoneme_ids = np.array([phoneme_to_id[p] for p in text_phonemes])
 
-        # Run text to speech
-        _LOGGER.debug("Running text to speech model (%s)", tts_model.__class__.__name__)
-        tts_start_time = time.perf_counter()
+# -----------------------------------------------------------------------------
 
-        mels = tts_model.phonemes_to_mels(phoneme_ids, settings=tts_settings)
-        tts_end_time = time.perf_counter()
 
-        _LOGGER.debug(
-            "Got mels in %s second(s) (shape=%s)",
-            tts_end_time - tts_start_time,
-            mels.shape,
-        )
+def _sentence_task(
+    phoneme_ids,
+    audio_settings,
+    tts_model,
+    tts_settings,
+    vocoder_model,
+    vocoder_settings,
+):
+    # Run text to speech
+    _LOGGER.debug("Running text to speech model (%s)", tts_model.__class__.__name__)
+    tts_start_time = time.perf_counter()
 
-        # Do denormalization, etc.
-        if audio_settings.signal_norm:
-            mels = audio_settings.denormalize(mels)
+    mels = tts_model.phonemes_to_mels(phoneme_ids, settings=tts_settings)
+    tts_end_time = time.perf_counter()
 
-        if audio_settings.convert_db_to_amp:
-            mels = audio_settings.db_to_amp(mels)
+    _LOGGER.debug(
+        "Got mels in %s second(s) (shape=%s)", tts_end_time - tts_start_time, mels.shape
+    )
 
-        if audio_settings.do_dynamic_range_compression:
-            mels = audio_settings.dynamic_range_compression(mels)
+    # Do denormalization, etc.
+    if audio_settings.signal_norm:
+        mels = audio_settings.denormalize(mels)
 
-        # Run vocoder
-        _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
-        vocoder_start_time = time.perf_counter()
-        audio = vocoder_model.mels_to_audio(mels, settings=vocoder_settings)
-        vocoder_end_time = time.perf_counter()
+    if audio_settings.convert_db_to_amp:
+        mels = audio_settings.db_to_amp(mels)
 
-        _LOGGER.debug(
-            "Got audio in %s second(s) (shape=%s)",
-            vocoder_end_time - vocoder_start_time,
-            audio.shape,
-        )
+    if audio_settings.do_dynamic_range_compression:
+        mels = audio_settings.dynamic_range_compression(mels)
 
-        audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
-        infer_sec = vocoder_end_time - tts_start_time
-        real_time_factor = audio_duration_sec / infer_sec
+    # Run vocoder
+    _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
+    vocoder_start_time = time.perf_counter()
+    audio = vocoder_model.mels_to_audio(mels, settings=vocoder_settings)
+    vocoder_end_time = time.perf_counter()
 
-        _LOGGER.debug(
-            "Real-time factor: %0.2f (audio=%0.2f sec, infer=%0.2f sec)",
-            real_time_factor,
-            audio_duration_sec,
-            infer_sec,
-        )
+    _LOGGER.debug(
+        "Got audio in %s second(s) (shape=%s)",
+        vocoder_end_time - vocoder_start_time,
+        audio.shape,
+    )
 
-        yield raw_text, audio
+    audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
+    infer_sec = vocoder_end_time - tts_start_time
+    real_time_factor = audio_duration_sec / infer_sec
+
+    _LOGGER.debug(
+        "Real-time factor: %0.2f (audio=%0.2f sec, infer=%0.2f sec)",
+        real_time_factor,
+        audio_duration_sec,
+        infer_sec,
+    )
+
+    return audio
 
 
 # -----------------------------------------------------------------------------

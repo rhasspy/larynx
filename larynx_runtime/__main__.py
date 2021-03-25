@@ -166,8 +166,10 @@ def main():
             number_converters=args.number_converters,
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
-            split_sentences=args.split_sentences,
             native_lang=native_lang,
+            max_workers=(
+                None if args.max_thread_workers <= 0 else args.max_thread_workers
+            ),
         )
 
         text_id = ""
@@ -284,11 +286,6 @@ def get_args():
         help="Allow number_conv form for specifying num2words converter (cardinal, ordinal, ordinal_num, year, currency)",
     )
     parser.add_argument(
-        "--split-sentences",
-        action="store_true",
-        help="Automatically split sentences into different audio files",
-    )
-    parser.add_argument(
         "--new-word",
         nargs=2,
         action="append",
@@ -326,6 +323,12 @@ def get_args():
         "--no-autoload-config",
         action="store_true",
         help="Don't automatically load config.json in model directory",
+    )
+    parser.add_argument(
+        "--max-thread-workers",
+        type=int,
+        default=2,
+        help="Maximum number of threads to concurrently run sentences through TTS/Vocoder",
     )
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
     parser.add_argument(
