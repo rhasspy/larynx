@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: make_sample_html.py <LOCAL_DIR>", file=sys.stderr)
+        sys.exit(1)
+
+    print('<html lang="en">')
+    print('<head><meta charset="utf-8"><title>Larynx Voice Samples</title></head>')
+    print("<body>")
+    print("<h1>Larynx Voice Samples</h1>")
+
+    local_dir = Path(sys.argv[1])
+
+    # local/<LANGUAGE>/<VOICE>-<MODEL>
+    for lang_dir in sorted(Path(local_dir).iterdir()):
+        if not lang_dir.is_dir():
+            continue
+
+        language = lang_dir.name
+
+        if language in ["hifi_gan", "waveglow"]:
+            # Exclude vocoders
+            continue
+
+        print("<h2>", language, "</h2>")
+
+        for voice_dir in sorted(lang_dir.iterdir()):
+            if not voice_dir.is_dir():
+                continue
+
+            samples_dir = voice_dir / "samples"
+            if not samples_dir.is_dir():
+                print("Missing", samples_dir, file=sys.stderr)
+                continue
+
+            test_sentences = samples_dir / "test_sentences.txt"
+            if not test_sentences.is_file():
+                print("Missing", test_sentences, file=sys.stderr)
+                continue
+
+            voice, model_type = voice_dir.name.split("-", maxsplit=1)
+            print("<h3>", voice, f"({model_type})", "</h3>")
+
+            with open(test_sentences, "r") as test_sentences_file:
+                for line in sorted(test_sentences_file):
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    if "|" in line:
+                        utt_id, text = line.split("|", maxsplit=1)
+                    else:
+                        utt_id, text = line, line
+
+                    wav_path = samples_dir / f"{utt_id}.wav"
+
+                    if not wav_path.is_file():
+                        print("Missing", wav_path, file=sys.stderr)
+                        continue
+
+                    print("<p>", text, "</p>")
+                    print(f'<audio controls src="{wav_path}"></audio>')
+                    print("<br>")
+
+            print("<br>")
+
+        # ---------------------------------------------------------------------
+
+        print("<br>")
+        print("<hr>")
+
+    print("</body>")
+    print("</html>")
+
+
+if __name__ == "__main__":
+    main()
