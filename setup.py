@@ -27,16 +27,16 @@ with open(version_path, "r") as version_file:
 # -----------------------------------------------------------------------------
 
 setuptools.setup(
-    name="larynx_runtime",
+    name="larynx",
     version=version,
-    description="End-to-end text to speech using gruut and onnx models",
+    description="End-to-end text to speech using IPA and onnx models",
     author="Michael Hansen",
     author_email="mike@rhasspy.org",
     url="https://github.com/rhasspy/larynx",
     packages=setuptools.find_packages(),
-    package_data={"larynx_runtime": ["py.typed"]},
+    package_data={"larynx": ["py.typed"]},
     install_requires=requirements,
-    entry_points={"console_scripts": ["larynx_runtime = larynx_runtime.__main__:main"]},
+    entry_points={"console_scripts": ["larynx = larynx.__main__:main"]},
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",

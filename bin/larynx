@@ -9,4 +9,4 @@ if [[ -d "${venv}" ]]; then
 fi
 
 export PYTHONPATH="${src_dir}:${PYTHONPATH}"
-python3 -m larynx_runtime "$@"
+python3 -m larynx "$@"

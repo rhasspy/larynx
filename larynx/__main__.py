@@ -22,7 +22,7 @@ from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
 from .wavfile import write as wav_write
 
-_LOGGER = logging.getLogger("larynx_runtime")
+_LOGGER = logging.getLogger("larynx")
 
 # -----------------------------------------------------------------------------
 
@@ -122,6 +122,13 @@ def main():
         no_optimizations=args.no_optimizations,
     )
 
+    tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None
+    if args.tts_model_type == TextToSpeechType.GLOW_TTS:
+        tts_settings = {
+            "noise_scale": args.noise_scale,
+            "length_scale": args.length_scale,
+        }
+
     # Load vocoder
     _LOGGER.debug(
         "Loading vocoder model (%s, %s)", args.vocoder_model_type, args.vocoder_model
@@ -166,6 +173,7 @@ def main():
             number_converters=args.number_converters,
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
+            tts_settings=tts_settings,
             native_lang=native_lang,
             max_workers=(
                 None if args.max_thread_workers <= 0 else args.max_thread_workers
@@ -298,6 +306,20 @@ def get_args():
         help="Path to directory with encoder/decoder/postnet onnx Tacotron2 models",
     )
     parser.add_argument("--glow-tts", help="Path to onnx Glow TTS model")
+
+    # GlowTTS setttings
+    parser.add_argument(
+        "--noise-scale",
+        type=float,
+        default=0.333,
+        help="Noise scale (default: 0.333, GlowTTS only)",
+    )
+    parser.add_argument(
+        "--length-scale",
+        type=float,
+        default=1.0,
+        help="Length scale (default: 1.0, GlowTTS only)",
+    )
 
     # Vocoder models
     parser.add_argument("--hifi-gan", help="Path to HiFi-GAN onnx generator model")

@@ -21,7 +21,7 @@ from .constants import (
     VocoderType,
 )
 
-_LOGGER = logging.getLogger("larynx_runtime")
+_LOGGER = logging.getLogger("larynx")
 
 # -----------------------------------------------------------------------------
 
