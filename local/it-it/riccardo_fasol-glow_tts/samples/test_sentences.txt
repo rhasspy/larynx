@@ -1,0 +1,5 @@
+da_dove_vieni|Da dove vieni?
+parli_un_altra|Parli un'altra lingua oltre l'italiano?
+auguri_di_pronta|Auguri di pronta guarigione!
+una_sola_lingua|Una sola lingua non è mai abbastanza.
+il_mio_aeroscafo|Il mio aeroscafo è pieno di anguille!

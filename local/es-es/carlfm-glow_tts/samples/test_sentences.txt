@@ -1,0 +1,5 @@
+una_cerveza_por_favor|Una cerveza por favor.
+puedes_hablar_más_despacio|¿Puedes hablar más despacio?
+siga_recto|¡Siga recto! Despúes gire a la izquierda!
+cómo_te_llamas|¿Cómo te llamas?
+el_bebé_bebe|El bebé bebe bebidas con burbujas.

@@ -1,0 +1,11 @@
+{
+    "mel_channels": 80,
+    "sampling_rate": 22050,
+    "flows": 12,
+    "groups": 8,
+    "early_every": 4,
+    "early_size": 2,
+    "wn_kernel_size": 3,
+    "wn_channels": 256,
+    "wn_layers": 8
+}

@@ -1,0 +1,5 @@
+pourriez-vous_parler|Pourriez-vous parler un peu moins vite?
+je_suis_allergique|Je suis allergique.
+est-ce_que_vous_pourriez_l'écrire|Est-ce que vous pourriez l'écrire?
+avez-vous_des_plats_végétariens|Avez-vous des plats végétariens?
+si_mon_tonton_tond_ton_tonton|Si mon tonton tond ton tonton, ton tonton sera tondu.
