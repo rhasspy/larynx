@@ -4,4 +4,4 @@ __pycache__/
 /build/
 /.venv/
 /dist/
-/local/
+*.onnx

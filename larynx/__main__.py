@@ -247,9 +247,9 @@ def main():
 
 def get_args():
     """Parse command-line arguments"""
-    parser = argparse.ArgumentParser(prog="larynx-runtime")
+    parser = argparse.ArgumentParser(prog="larynx")
     parser.add_argument(
-        "--language", required=True, help="Gruut language for text input"
+        "--language", required=True, help="Gruut language for text input (en-us, etc.)"
     )
     parser.add_argument(
         "text", nargs="*", help="Text to convert to speech (default: stdin)"

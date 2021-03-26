@@ -5,6 +5,7 @@ from pathlib import Path
 import setuptools
 
 this_dir = Path(__file__).parent
+module_dir = this_dir / "larynx"
 
 # -----------------------------------------------------------------------------
 
@@ -20,7 +21,7 @@ if requirements_path.is_file():
     with open(requirements_path, "r") as requirements_file:
         requirements = requirements_file.read().splitlines()
 
-version_path = this_dir / "VERSION"
+version_path = module_dir / "VERSION"
 with open(version_path, "r") as version_file:
     version = version_file.read().strip()
 
@@ -34,7 +35,7 @@ setuptools.setup(
     author_email="mike@rhasspy.org",
     url="https://github.com/rhasspy/larynx",
     packages=setuptools.find_packages(),
-    package_data={"larynx": ["py.typed"]},
+    package_data={"larynx": ["VERSION", "py.typed"]},
     install_requires=requirements,
     entry_points={"console_scripts": ["larynx = larynx.__main__:main"]},
     classifiers=[

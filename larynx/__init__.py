@@ -23,6 +23,10 @@ from .constants import (
 
 _LOGGER = logging.getLogger("larynx")
 
+_DIR = Path(__file__).parent
+
+__version__ = (_DIR / "VERSION").read_text().strip()
+
 # -----------------------------------------------------------------------------
 
 

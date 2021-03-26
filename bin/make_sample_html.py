@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -12,8 +13,12 @@ def main():
     print('<head><meta charset="utf-8"><title>Larynx Voice Samples</title></head>')
     print("<body>")
     print("<h1>Larynx Voice Samples</h1>")
+    print('<p>Voices samples trained for <a href="https://github.com/rhasspy/larynx">Larynx.</a></p>')
 
     local_dir = Path(sys.argv[1])
+
+    # language -> voice name -> samples dir
+    voices = defaultdict(dict)
 
     # local/<LANGUAGE>/<VOICE>-<MODEL>
     for lang_dir in sorted(Path(local_dir).iterdir()):
@@ -25,8 +30,6 @@ def main():
         if language in ["hifi_gan", "waveglow"]:
             # Exclude vocoders
             continue
-
-        print("<h2>", language, "</h2>")
 
         for voice_dir in sorted(lang_dir.iterdir()):
             if not voice_dir.is_dir():
@@ -42,8 +45,37 @@ def main():
                 print("Missing", test_sentences, file=sys.stderr)
                 continue
 
-            voice, model_type = voice_dir.name.split("-", maxsplit=1)
-            print("<h3>", voice, f"({model_type})", "</h3>")
+            voices[language][voice_dir.name] = samples_dir
+
+    # Print table of contents
+    print("<ul>")
+    for language, lang_voices in voices.items():
+        print("<li>", f'<a href="#{language}">', language, "</a>")
+
+        print("<ul>")
+        for voice_name in lang_voices:
+            print(
+                "<li>",
+                f'<a href="#{language}_{voice_name}">',
+                voice_name,
+                "</a>",
+                "</li>",
+            )
+        print("</ul>")
+
+        print("</li>")
+
+    print("</ul>")
+    print("<hr>")
+
+    # Print samples
+    for language, lang_voices in voices.items():
+        print(f'<h2 id="{language}">', language, "</h2>")
+
+        for voice_name, samples_dir in lang_voices.items():
+            test_sentences = samples_dir / "test_sentences.txt"
+            voice, model_type = voice_name.split("-", maxsplit=1)
+            print(f'<h3 id="{language}_{voice_name}">', voice, f"({model_type})", "</h3>")
 
             with open(test_sentences, "r") as test_sentences_file:
                 for line in sorted(test_sentences_file):
