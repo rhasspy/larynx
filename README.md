@@ -11,6 +11,10 @@ Larynx's goals are:
 * Broad language support
 * Voices trained purely from public datasets
 
+## Samples
+
+[Listen to voice samples](https://rhasspy.github.io/larynx/) from all of the [pre-trained models](https://github.com/rhasspy/larynx/releases).
+
 ## Installation
 
 ```sh
