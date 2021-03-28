@@ -1,7 +1,7 @@
 {
     "seed": 1234,
-    "epochs": 100000,
-    "learning_rate": 7.13180413418185e-06,
+    "epochs": 10000,
+    "learning_rate": 0.00019569670544194998,
     "betas": [
         0.9,
         0.98
@@ -13,7 +13,7 @@
     "batch_size": 32,
     "fp16_run": false,
     "min_seq_length": null,
-    "max_seq_length": null,
+    "max_seq_length": 200,
     "audio": {
         "filter_length": 1024,
         "hop_length": 256,
@@ -35,7 +35,7 @@
         "convert_db_to_amp": true
     },
     "model": {
-        "num_symbols": 46,
+        "num_symbols": 52,
         "hidden_channels": 192,
         "filter_channels": 768,
         "filter_channels_dp": 256,

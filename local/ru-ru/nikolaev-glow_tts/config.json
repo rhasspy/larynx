@@ -1,7 +1,7 @@
 {
     "seed": 1234,
     "epochs": 10000,
-    "learning_rate": 7.274440216865487e-05,
+    "learning_rate": 0.0002278409670091259,
     "betas": [
         0.9,
         0.98
@@ -11,9 +11,9 @@
     "warmup_steps": 4000,
     "scheduler": "noam",
     "batch_size": 32,
-    "fp16_run": false,
+    "fp16_run": true,
     "min_seq_length": null,
-    "max_seq_length": 200,
+    "max_seq_length": null,
     "audio": {
         "filter_length": 1024,
         "hop_length": 256,
@@ -30,7 +30,9 @@
         "min_level_db": -100.0,
         "max_norm": 1.0,
         "clip_norm": true,
-        "symmetric_norm": true
+        "symmetric_norm": true,
+        "do_dynamic_range_compression": true,
+        "convert_db_to_amp": true
     },
     "model": {
         "num_symbols": 52,
@@ -60,5 +62,5 @@
         "n_frames_per_step": 1
     },
     "version": 1,
-    "git_commit": "31617ae"
+    "git_commit": "b05e772"
 }
