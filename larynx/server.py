@@ -154,10 +154,10 @@ async def text_to_wav(
     # Load language
     gruut_lang = _GRUUT_LANGS.get(language)
     if gruut_lang is None:
-        data_dirs = gruut.Language.get_data_dirs() + [_DIR / "gruut"]
+        data_dirs = gruut.Language.get_data_dirs() + [_DIR.parent / "gruut"]
         gruut_lang = gruut.Language.load(language=language, data_dirs=data_dirs)
 
-        assert gruut_lang, f"No support for language {language} in gruut"
+        assert gruut_lang, f"No support for language {language} in gruut ({data_dirs})"
         _GRUUT_LANGS[language] = gruut_lang
 
     # Settings
