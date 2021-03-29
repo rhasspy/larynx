@@ -132,6 +132,7 @@ The GlowTTS voices support two additional parameters:
     * Russian (`ru-ru`, 3 voices)
         * hajdurova (F)
         * nikolaev (M)
+        * minaev (M)
 * [Tacotron2](https://github.com/rhasspy/tacotron2-train)
     * Coming soon
 
