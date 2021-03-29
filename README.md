@@ -2,7 +2,7 @@
 
 End-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/).
 
-![Larynx logo](img/logo.png)
+![Larynx screenshot](img/web_screenshot.png)
 
 Larynx's goals are:
 
@@ -35,7 +35,19 @@ $ python3 -m gruut <LANGUAGE> download
 
 Voices and vocoders are available to download from the [release page](https://github.com/rhasspy/larynx/releases). They can be extracted anywhere, and the directory simply needs to be referenced in the command-line (e,g, `--glow-tts /path/to/voice`).
 
-## Example
+## Web Server
+
+You can run a local web server with:
+
+```sh
+$ python3 -m larynx.server --voices-dir /path/to/voices
+```
+
+Visit http://localhost:5002 to view the site and try out voices. See http://localhost/5002/openapi for documentation on the available HTTP endpoints.
+
+See `--help` for more options.
+
+## Command-Line Example
 
 The command below synthesizes multiple sentences and saves them to a directory. The `--csv` command-line flag indicates that each sentence is of the form `id|text` where `id` will be the name of the WAV file.
 

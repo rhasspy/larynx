@@ -1,0 +1,80 @@
+openapi: "3.0.0"
+info:
+  title: 'Larynx'
+  version: '1.0'
+  description: 'Larynx Text to Speech API'
+schemes:
+  - http
+servers:
+  - url: http://localhost:5000
+    description: Local server
+paths:
+  /api/tts:
+    get:
+      summary: 'Speak text to WAV'
+      parameters:
+        - in: query
+          name: voice
+          required: true
+          description: 'Voice in the form <language>/<name>-<tts_system>'
+          schema:
+            type: string
+            example: 'en-us/harvard-glow_tts'
+        - in: query
+          name: text
+          required: true
+          description: 'Text to speak'
+          schema:
+            type: string
+            example: 'Welcome to the world of speech synthesis!'
+        - in: query
+          name: vocoder
+          description: 'Vocoder in the form <vocoder_system>/<model_name>'
+          schema:
+            type: string
+            example: 'hifi_gan/universal_large'
+        - in: query
+          name: denoiserStrength
+          description: 'Strength of vocoder denoiser (0-1, 0 is disabled)'
+          schema:
+            type: number
+            example: 0.005
+        - in: query
+          name: noiseScale
+          description: 'Volatility of speaker (0-1, default: 0.333, GlowTTS only)'
+          schema:
+            type: number
+            example: 0.333
+        - in: query
+          name: lengthScale
+          description: 'Speed of speaker (default: 1.0, faster < 1 < slower, GlowTTS only)'
+          schema:
+            type: number
+            example: 0.85
+      produces:
+        - audio/wav
+      responses:
+        '200':
+          description: audio
+          schema:
+            type: binary
+  /api/voices:
+    get:
+      summary: 'Get available voices'
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: voices
+          schema:
+            type: object
+  /api/vocoders:
+    get:
+      summary: 'Get available vocoders'
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: vocoders
+          schema:
+            type: object

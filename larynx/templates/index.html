@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta name="description" content="">
+        <meta name="author" content="">
+
+        <title>Larynx TTS</title>
+
+        <!-- Bootstrap core CSS -->
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+
+        <!-- Custom styles for this template -->
+        <style>
+         body {
+             padding-top: 0;
+         }
+         @media (min-width: 992px) {
+             body {
+                 padding-top: 0;
+             }
+         }
+
+        </style>
+    </head>
+
+    <body>
+        <a href="https://github.com/rhasspy/larynx"><img style="position: absolute; z-index:1000; top: 0; left: 0; border: 0;" src="img/forkme_left_darkblue_121621.png" alt="Fork me on GitHub"></a>
+
+        <!-- Page Content -->
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-12 text-center">
+                    <img class="mt-5" src="img/logo.png" alt=></img>
+                    <h1 class="mt-3 mb-3">Larynx</h1>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <textarea id="text" placeholder="Type here..." class="form-control" rows="3" name="text"></textarea>
+                </div>
+                <div class="col-auto">
+                    <button id="speak-button" name="speak" class="btn btn-lg btn-primary">Speak</button>
+                    <br/><br/>
+                    <a href="/openapi/" title="OpenAPI page" class="badge badge-info">API</a>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-auto">
+                    <select id="voice-list" name="voices">
+                    </select>
+                </div>
+                <div class="col">
+                    <select id="vocoder-list" name="vocoders">
+                        <!-- <option value="waveglow/wn_256">Best Quality</option> -->
+                        <option value="hifi_gan/universal_large" selected>High Quality</option>
+                        <option value="hifi_gan/vctk_medium">Medium Quality</option>
+                        <option value="hifi_gan/vctk_small">Low Quality</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label for="denoiser-strength" class="ml-2">Denoiser:</label>
+                    <input type="number" id="denoiser-strength" name="denoiser" size="5" min="0" max="1" step="0.001" value="0.005">
+                    <label for="noise-scale" class="ml-2">Noise:</label>
+                    <input type="number" id="noise-scale" name="noiseScale" size="5" min="0" max="1" step="0.001" value="0.333">
+                    <label for="length-scale" class="ml-2">Length:</label>
+                    <input type="number" id="length-scale" name="lengthScale" size="5" min="0" step="0.001" value="1">
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col">
+                    <audio id="audio" controls autoplay hidden></audio>
+                    <p id="message"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bootstrap core JavaScript -->
+        <script>
+         function q(selector) {return document.querySelector(selector)}
+         q('#text').focus()
+         function do_tts(e) {
+             text = q('#text').value
+             if (text) {
+                 q('#message').textContent = 'Synthesizing...'
+                 q('#speak-button').disabled = true
+                 q('#audio').hidden = true
+                 synthesize(text)
+             }
+             e.preventDefault()
+             return false
+         }
+         q('#speak-button').addEventListener('click', do_tts)
+         async function synthesize(text) {
+             var voiceList = q('#voice-list')
+             var voice = voiceList.options[voiceList.selectedIndex].value
+
+             var vocoderList = q('#vocoder-list')
+             var vocoder = vocoderList.options[vocoderList.selectedIndex].value
+             var denoiserStrength = q('#denoiser-strength').value || '0'
+             var noiseScale = q('#noise-scale').value || '0.333'
+             var lengthScale = q('#length-scale').value || '1.0'
+
+             var startTime = performance.now()
+
+             res = await fetch(
+                 '/api/tts?text=' + encodeURIComponent(text) +
+                 '&voice=' + encodeURIComponent(voice) +
+                 '&vocoder=' + encodeURIComponent(vocoder) +
+                 '&denoiserStrength=' + encodeURIComponent(denoiserStrength) +
+                 '&noiseScale=' + encodeURIComponent(noiseScale) +
+                 '&lengthScale=' + encodeURIComponent(lengthScale),
+                 {cache: 'no-cache'})
+
+             if (res.ok) {
+                 blob = await res.blob()
+                 var elapsedTime = performance.now() - startTime
+
+                 q('#message').textContent = (elapsedTime / 1000) + ' second(s)'
+                 q('#speak-button').disabled = false
+                 q('#audio').src = URL.createObjectURL(blob)
+                 q('#audio').hidden = false
+             } else {
+                 message = await res.text()
+                 q('#message').textContent = message
+                 q('#speak-button').disabled = false
+             }
+         }
+
+         function loadVoices() {
+             // Remove previous voices
+             var voiceList = q('#voice-list')
+             for (var i = voiceList.options.length - 1; i >= 0; i--) {
+                 voiceList.options[i].remove()
+             }
+
+             fetch('/api/voices')
+                 .then(function(res) {
+                     if (!res.ok) throw Error(res.statusText)
+                     return res.json()
+                 }).then(function(voices) {
+                     Object.entries(voices).forEach(function(id_voice) {
+                         var id = id_voice[0]
+                         voiceList.insertAdjacentHTML(
+                             'beforeend', '<option value="' + id + '">' + id + '</option>'
+                         )
+                     })
+                 }).catch(function(err) {
+                     q('#message').textContent = 'Error: ' + err.message
+                     q('#speak-button').disabled = false
+                 })
+         }
+
+         window.addEventListener('load', function() {
+             loadVoices()
+         })
+        </script>
+
+    </body>
+
+</html>
