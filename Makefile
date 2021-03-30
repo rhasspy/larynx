@@ -18,6 +18,9 @@ dist:
 
 docker:
 	scripts/build-docker.sh
+	for lang in de-de en-us es-es fr-fr it-it nl ru-ru sv-se; do \
+        LANGUAGE=$$lang scripts/build-docker.sh; \
+    done
 
 amd64:
 	NOBUILDX=1 scripts/build-docker.sh

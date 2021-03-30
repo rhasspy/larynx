@@ -42,8 +42,10 @@ ENV PIP_INSTALL='install -f /download'
 RUN cd /app && \
     scripts/create-venv.sh
 
-# Delete extranous gruut data files
-RUN cd /download/gruut && \
+# Copy and delete extranous gruut data files
+COPY gruut/ /gruut/
+RUN mkdir -p /gruut && \
+    cd /gruut && \
     find . -name lexicon.txt -delete
 
 # -----------------------------------------------------------------------------
@@ -68,7 +70,7 @@ RUN apt-get update && \
 COPY --from=build /app/ /app/
 
 # Copy gruut data files
-COPY --from=build /download/gruut/ /app/gruut/
+COPY --from=build /gruut/ /app/gruut/
 
 # Copy source code
 COPY larynx/ /app/larynx/

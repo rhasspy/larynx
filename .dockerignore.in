@@ -1,0 +1,10 @@
+.venv/
+.git/
+.test_venv/
+__pycache__/
+.mypy_cache/
+dist/
+local/
+gruut/
+
+!local/hifi_gan/
