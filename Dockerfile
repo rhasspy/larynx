@@ -24,7 +24,8 @@ ENV LANG C.UTF-8
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
-        python3 python3-pip python3-venv
+        python3 python3-pip python3-venv \
+        build-essential
 
 # IFDEF PROXY
 #! ENV PIP_INDEX_URL=http://${PYPI_PROXY_HOST}:${PYPI_PROXY_PORT}/simple/

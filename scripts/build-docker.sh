@@ -7,6 +7,9 @@ src_dir="$(realpath "${this_dir}/..")"
 
 version="$(cat "${src_dir}/larynx/VERSION")"
 
+# Directory for cached wheels
+mkdir -p "${src_dir}/download"
+
 # -----------------------------------------------------------------------------
 
 : "${PLATFORMS=linux/amd64,linux/arm/v7,linux/arm64}"
