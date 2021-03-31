@@ -25,7 +25,7 @@ ENV LANG C.UTF-8
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
         python3 python3-pip python3-venv \
-        build-essential
+        build-essential python3-dev
 
 # IFDEF PROXY
 #! ENV PIP_INDEX_URL=http://${PYPI_PROXY_HOST}:${PYPI_PROXY_PORT}/simple/
@@ -40,6 +40,8 @@ COPY download/ /download/
 
 # Install Larynx
 ENV PIP_INSTALL='install -f /download'
+ENV PIP_VERSION='pip==20.2.4'
+ENV PIP_PREINSTALL_PACKAGES='numpy==1.20.1'
 RUN cd /app && \
     scripts/create-venv.sh
 
@@ -61,7 +63,8 @@ ENV LANG C.UTF-8
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
-        python3 python3-pip python3-venv
+        python3 python3-pip python3-venv \
+        libopenblas-base libatomic1 libgomp1
 
 # IFDEF PROXY
 #! RUN rm -f /etc/apt/apt.conf.d/01proxy
@@ -81,6 +84,6 @@ COPY local/ /app/local/
 
 WORKDIR /app
 
-EXPOSE 5500
+EXPOSE 5002
 
 ENTRYPOINT ["/app/.venv/bin/python3", "-m", "larynx.server"]

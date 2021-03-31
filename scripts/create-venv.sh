@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-if [[ -z "${PIP_INSTALL}" ]]; then
-    PIP_INSTALL='install'
-fi
+: "${PIP_INSTALL=install}"
+: "${PIP_VERSION=pip}"
 
 # Directory of *this* script
 this_dir="$( cd "$( dirname "$0" )" && pwd )"
@@ -27,8 +26,12 @@ source "${venv}/bin/activate"
 
 # Install Python dependencies
 echo 'Installing Python dependencies'
-pip3 ${PIP_INSTALL} --upgrade pip
+pip3 ${PIP_INSTALL} --upgrade "${PIP_VERSION}"
 pip3 ${PIP_INSTALL} --upgrade wheel setuptools
+
+if [[ -n "${PIP_PREINSTALL_PACKAGES}" ]]; then
+    pip3 ${PIP_INSTALL} ${PIP_PREINSTALL_PACKAGES}
+fi
 
 if [[ -f requirements.txt ]]; then
     pip3 ${PIP_INSTALL} -r requirements.txt
