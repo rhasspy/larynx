@@ -62,6 +62,9 @@ parser.add_argument(
     help="Directory with <LANGUAGE>/<VOICE> structure (overrides LARYNX_VOICES_DIR env variable)",
 )
 parser.add_argument(
+    "--no-optimizations", action="store_true", help="Disable Onnx optimizations"
+)
+parser.add_argument(
     "--debug", action="store_true", help="Print DEBUG messages to console"
 )
 args = parser.parse_args()
@@ -121,7 +124,11 @@ async def text_to_wav(
     if tts_model is None:
         # Load TTS model
         tts_model_path = _VOICES_DIR / language / voice_str
-        tts_model = load_tts_model(model_type=tts_system, model_path=tts_model_path)
+        tts_model = load_tts_model(
+            model_type=tts_system,
+            model_path=tts_model_path,
+            no_optimizations=args.no_optimizations,
+        )
         _TTS_MODELS[voice] = tts_model
 
         # Load audio settings
@@ -147,7 +154,9 @@ async def text_to_wav(
         # Load vocoder
         vocoder_model_path = _VOICES_DIR / vocoder_system / vocoder_name
         vocoder_model = load_vocoder_model(
-            model_type=vocoder_system, model_path=vocoder_model_path
+            model_type=vocoder_system,
+            model_path=vocoder_model_path,
+            no_optimizations=args.no_optimizations,
         )
         _VOCODER_MODELS[vocoder] = vocoder_model
 
