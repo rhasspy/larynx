@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import platform
 import signal
 import time
 import typing
@@ -62,7 +63,10 @@ parser.add_argument(
     help="Directory with <LANGUAGE>/<VOICE> structure (overrides LARYNX_VOICES_DIR env variable)",
 )
 parser.add_argument(
-    "--no-optimizations", action="store_true", help="Disable Onnx optimizations"
+    "--optimizations",
+    choices=["auto", "on", "off"],
+    default="auto",
+    help="Enable/disable Onnx optimizations (auto=disable on armv7l)",
 )
 parser.add_argument(
     "--debug", action="store_true", help="Print DEBUG messages to console"
@@ -75,6 +79,14 @@ else:
     logging.basicConfig(level=logging.INFO)
 
 _LOGGER.debug(args)
+
+setattr(args, "no_optimizations", False)
+if args.optimizations == "off":
+    args.no_optimizations = True
+elif args.optimizations == "auto":
+    if platform.machine() == "armv7l":
+        # Enabling optimizations on 32-bit ARM crashes
+        args.no_optimizations = True
 
 if args.voices_dir:
     # Use command-line
