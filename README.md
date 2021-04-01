@@ -15,7 +15,46 @@ Larynx's goals are:
 
 [Listen to voice samples](https://rhasspy.github.io/larynx/) from all of the [pre-trained models](https://github.com/rhasspy/larynx/releases).
 
-## Installation
+## Docker Installation
+
+Pre-built Docker images for each language are available for the following platforms:
+
+* `linux/amd64` - desktop/laptop/server
+* `linux/arm64` - Raspberry Pi 64-bit
+* `linux/arm/v7` - Raspberry Pi 32-bit
+
+Run the Larynx web server with:
+
+```sh
+$ docker run -it -p 5002:5002 rhasspy/larynx:<LANG>
+```
+
+where `<LANG>` is one of:
+
+* `de-de` - German
+* `en-us` - U.S. English
+* `es-es` - Spanish
+* `fr-fr` - French
+* `it-it` - Italian
+* `nl` - Dutch
+* `ru-ru` - Russian
+* `sv-se` - Swedish
+
+Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi/ for HTTP endpoint documentation.
+
+A larger docker image with all languages is also available as `rhasspy/larynx`
+
+### MaryTTS Compatible API
+
+To use Larynx as a drop-in replacement for a [MaryTTS](http://mary.dfki.de/) server (e.g., for use with [Home Assistant](https://www.home-assistant.io/integrations/marytts/)), run:
+
+```sh
+$ docker run -it -p 59125:5002 rhasspy/larynx:<LANG>
+```
+
+The `/process` HTTP endpoint should now work for voices formatted as `<LANG>/<VOICE>` such as `en-us/harvard-glow_tts`.
+
+## Python Installation
 
 ```sh
 $ pip install larynx
