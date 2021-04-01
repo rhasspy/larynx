@@ -40,7 +40,7 @@ COPY download/ /download/
 
 # Install Larynx
 ENV PIP_INSTALL='install -f /download'
-ENV PIP_VERSION='pip==20.2.4'
+ENV PIP_VERSION='pip<=20.2.4'
 ENV PIP_PREINSTALL_PACKAGES='numpy==1.20.1'
 RUN cd /app && \
     scripts/create-venv.sh
