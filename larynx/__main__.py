@@ -96,13 +96,15 @@ def main():
             ipa = ipa.replace("'", gruut_ipa.IPA.STRESS_PRIMARY.value)
             ipa = ipa.replace(",", gruut_ipa.IPA.STRESS_SECONDARY.value)
 
-            word_pron = [
-                p.text
-                for p in gruut_lang.phonemes.split(
-                    ipa, keep_stress=gruut_lang.keep_stress
-                )
-            ]
-            _LOGGER.debug("%s %s", word, " ".join(word_pron))
+            word_pron = gruut.utils.WordPronunciation(
+                phonemes=[
+                    p.text
+                    for p in gruut_lang.phonemes.split(
+                        ipa, keep_stress=gruut_lang.keep_stress
+                    )
+                ]
+            )
+            _LOGGER.debug("%s %s", word, " ".join(word_pron.phonemes))
             word_prons = lexicon.get(word)
             if word_prons:
                 # Insert before other pronunciations
@@ -158,7 +160,8 @@ def main():
     for line in texts:
         line_id = ""
         line = line.strip()
-        if not line:
+        if not line or (args.text_comment and line.startswith(args.text_comment)):
+            # Skip empty lines and comments (--text-comment)
             continue
 
         if args.output_naming == OutputNaming.ID:
@@ -253,6 +256,10 @@ def get_args():
     )
     parser.add_argument(
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
+    )
+    parser.add_argument(
+        "--text-comment",
+        help="String at the beginning of a line that indicates a comment (default: none)",
     )
     parser.add_argument(
         "--config", help="Path to JSON configuration file with audio settings"

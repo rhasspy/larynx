@@ -82,48 +82,57 @@ def text_to_speech(
                 sentence.tokens, word_indexes=word_indexes, word_breaks=True
             )
 
+            # Do post processing (e.g., French liason)
+            first_pron = [wps[0].phonemes for wps in sentence_prons if wps]
+            first_pron = gruut_lang.phonemizer.post_process_sentence(
+                gruut_lang.language, sentence.tokens, first_pron, word_breaks=True
+            )
+
             # Pick first pronunciation for each word
-            first_pron = []
-            for word_prons in sentence_prons:
-                if word_prons:
-                    for phoneme in word_prons[0].phonemes:
-                        if not phoneme:
-                            continue
+            first_phonemes: typing.List[str] = []
+            for word_pron in first_pron:
+                for phoneme in word_pron:
+                    if not phoneme:
+                        continue
 
-                        # Split out stress ("ˈa" -> "ˈ", "a")
-                        # Loop because languages like Swedish can have multiple
-                        # accents on a single phoneme.
-                        while phoneme and (
-                            gruut_ipa.IPA.is_stress(phoneme[0])
-                            or gruut_ipa.IPA.is_accent(phoneme[0])
-                        ):
-                            first_pron.append(phoneme[0])
-                            phoneme = phoneme[1:]
+                    # Split out stress ("ˈa" -> "ˈ", "a")
+                    # Loop because languages like Swedish can have multiple
+                    # accents on a single phoneme.
+                    while phoneme and (
+                        gruut_ipa.IPA.is_stress(phoneme[0])
+                        or gruut_ipa.IPA.is_accent(phoneme[0])
+                    ):
+                        first_phonemes.append(phoneme[0])
+                        phoneme = phoneme[1:]
 
-                        first_pron.append(phoneme)
+                    first_phonemes.append(phoneme)
 
-            if not first_pron:
+            if not first_phonemes:
                 # No phonemes
                 continue
 
             # Ensure sentence ends with major break
-            if first_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
-                first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+            if first_phonemes[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
+                first_phonemes.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
             # Add another major break for good measure
-            first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+            first_phonemes.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
-            text_phonemes: typing.Iterable[str] = first_pron
+            text_phonemes: typing.Iterable[str] = first_phonemes
 
             if accent_map:
                 # Map to different phoneme set
                 text_phonemes = itertools.chain(
-                    *[accent_map.get(p, p) for p in first_pron]
+                    *[accent_map.get(p, p) for p in text_phonemes]
                 )
 
             # ---------------------------------------------------------------------
 
-            _LOGGER.debug("Words for '%s': %s", sentence.raw_text, sentence.clean_words)
+            _LOGGER.debug(
+                "Words for '%s': %s",
+                sentence.raw_text,
+                [f"{t.text}/{t.pos}" if t.pos else t.text for t in sentence.tokens],
+            )
             _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
 
             # Convert to phoneme ids
