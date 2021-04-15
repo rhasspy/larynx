@@ -193,10 +193,10 @@ def _sentence_task(
 
     audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
     infer_sec = vocoder_end_time - tts_start_time
-    real_time_factor = audio_duration_sec / infer_sec
+    real_time_factor = infer_sec / audio_duration_sec if audio_duration_sec > 0 else 0.0
 
     _LOGGER.debug(
-        "Real-time factor: %0.2f (audio=%0.2f sec, infer=%0.2f sec)",
+        "Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)",
         real_time_factor,
         audio_duration_sec,
         infer_sec,
