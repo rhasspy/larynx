@@ -78,3 +78,21 @@ paths:
           description: vocoders
           schema:
             type: object
+  /api/phonemes:
+    get:
+      summary: 'Get phonemes for language'
+      parameters:
+        - in: query
+          name: language
+          required: true
+          description: 'Gruut language code'
+          schema:
+            type: string
+            example: 'en-us'
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: phonemes
+          schema:
+            type: object

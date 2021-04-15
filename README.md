@@ -62,6 +62,8 @@ $ pip install larynx
 
 For Raspberry Pi (ARM), you will first need to [manually install phonetisaurus](https://github.com/rhasspy/phonetisaurus-pypi/releases).
 
+For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/download/v1.0/onnxruntime-1.6.0-cp37-cp37m-linux_armv7l.whl) is available (64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
+
 ### Language Download
 
 Larynx uses [gruut](https://github.com/rhasspy/gruut) to transform text into phonemes. You must install the appropriate gruut language before using Larynx. U.S. English is included with gruut, but for other languages:

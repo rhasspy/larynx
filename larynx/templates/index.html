@@ -76,6 +76,26 @@
                     <p id="message"></p>
                 </div>
             </div>
+
+            <div class="row mb-3">
+                <div class="col text-center">
+                    <table id="phoneme-table" class="table table-striped">
+                        <thead>
+                            <th>
+                                <a href="https://en.wikipedia.org/wiki/International_Phonetic_Alphabet">IPA</a>
+                            </th>
+                            <th>Example</th>
+                            <th>Audio</th>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                    <br>
+                    <div class="text-muted">
+                        Phonemes sounds from <a href="https://www.ipachart.com/" target="_blank" title="IPA chart with sounds">IPA chart</a>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Bootstrap core JavaScript -->
@@ -154,8 +174,54 @@
                  })
          }
 
+         function loadPhonemes() {
+             var language = 'en-us'
+
+             fetch('/api/phonemes?language=' + encodeURIComponent(language))
+                 .then(function(res) {
+                     if (!res.ok) throw Error(res.statusText)
+                     return res.json()
+                 }).then(function(phonemes) {
+                     var newBody = document.createElement('tbody')
+                     var oldBody = q('#phoneme-table').getElementsByTagName('tbody')[0]
+
+                     Object.entries(phonemes).forEach(function(phoneme_info) {
+
+                         var phoneme = phoneme_info[0]
+                         var info = phoneme_info[1]
+                         var example = info.example
+                         var url = info.url || ''
+
+                         var tr = document.createElement('tr')
+                         var tdPhoneme = document.createElement('td')
+                         var tdAudio = document.createElement('td')
+
+                         tdPhoneme.textContent = phoneme
+
+                         if (url.length > 0) {
+                             // Audio example
+                             tdAudio.innerHTML = '<audio controls src="' + url + '"></audio>'
+                         }
+
+                         var tdExample = document.createElement('td')
+                         tdExample.textContent = example
+
+                         tr.appendChild(tdPhoneme)
+                         tr.appendChild(tdExample)
+                         tr.appendChild(tdAudio)
+                         newBody.appendChild(tr)
+                     })
+
+                     oldBody.parentNode.replaceChild(newBody, oldBody)
+                 }).catch(function(err) {
+                     q('#message').textContent = 'Error: ' + err.message
+                     q('#speak-button').disabled = false
+                 })
+         }
+
          window.addEventListener('load', function() {
              loadVoices()
+             loadPhonemes()
          })
         </script>
 

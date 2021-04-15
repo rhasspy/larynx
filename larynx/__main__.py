@@ -15,11 +15,11 @@ from pathlib import Path
 import numpy as np
 
 import gruut
-import gruut_ipa
 
 from . import load_tts_model, load_vocoder_model, text_to_speech
 from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
+from .utils import _IPA_TRANSLATE
 from .wavfile import write as wav_write
 
 _LOGGER = logging.getLogger("larynx")
@@ -92,10 +92,7 @@ def main():
         _LOGGER.debug("Adding %s new word(s) to lexicon", len(args.new_word))
         lexicon = gruut_lang.phonemizer.lexicon
         for word, ipa in args.new_word:
-            # Allow ' for primary stress and , for secondary stress
-            ipa = ipa.replace("'", gruut_ipa.IPA.STRESS_PRIMARY.value)
-            ipa = ipa.replace(",", gruut_ipa.IPA.STRESS_SECONDARY.value)
-
+            ipa = ipa.translate(_IPA_TRANSLATE)
             word_pron = [
                 p.text
                 for p in gruut_lang.phonemes.split(
@@ -178,6 +175,7 @@ def main():
             max_workers=(
                 None if args.max_thread_workers <= 0 else args.max_thread_workers
             ),
+            inline_phonemes=args.inline_phonemes,
         )
 
         text_id = ""
@@ -353,6 +351,11 @@ def get_args():
         help="Maximum number of threads to concurrently run sentences through TTS/Vocoder",
     )
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
+    parser.add_argument(
+        "--inline-phonemes",
+        action="store_true",
+        help="Allow [[ phonemes ]] embedded in text",
+    )
     parser.add_argument(
         "--debug", action="store_true", help="Print DEBUG messages to the console"
     )

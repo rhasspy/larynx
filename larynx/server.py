@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
 
+import gruut_ipa
 import hypercorn
 import numpy as np
 import quart_cors
@@ -42,6 +43,7 @@ from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
 _VOICES_DIR = _DIR.parent / "local"
+_WAV_DIR = _DIR / "wav"
 
 # Directory names that contain vocoders instead of voices
 _VOCODER_DIR_NAMES = {"hifi_gan", "waveglow"}
@@ -173,13 +175,7 @@ async def text_to_wav(
         _VOCODER_MODELS[vocoder] = vocoder_model
 
     # Load language
-    gruut_lang = _GRUUT_LANGS.get(language)
-    if gruut_lang is None:
-        data_dirs = gruut.Language.get_data_dirs() + [_DIR.parent / "gruut"]
-        gruut_lang = gruut.Language.load(language=language, data_dirs=data_dirs)
-
-        assert gruut_lang, f"No support for language {language} in gruut ({data_dirs})"
-        _GRUUT_LANGS[language] = gruut_lang
+    gruut_lang = get_lang(language)
 
     # Settings
     tts_settings = None
@@ -256,6 +252,19 @@ def get_voices() -> typing.Dict[str, typing.Dict[str, str]]:
             }
 
     return voices
+
+
+def get_lang(language: str) -> gruut.Language:
+    """Load language from cache or disk"""
+    gruut_lang = _GRUUT_LANGS.get(language)
+    if gruut_lang is None:
+        data_dirs = gruut.Language.get_data_dirs() + [_DIR.parent / "gruut"]
+        gruut_lang = gruut.Language.load(language=language, data_dirs=data_dirs)
+
+        assert gruut_lang, f"No support for language {language} in gruut ({data_dirs})"
+        _GRUUT_LANGS[language] = gruut_lang
+
+    return gruut_lang
 
 
 # -----------------------------------------------------------------------------
@@ -337,6 +346,57 @@ async def app_say() -> Response:
     return Response(wav_bytes, mimetype="audio/wav")
 
 
+@app.route("/api/phonemes", methods=["GET"])
+async def api_phonemes():
+    """Get phonemes for language"""
+    language = request.args.get("language", "en-us")
+    gruut_lang = get_lang(language)
+
+    phonemes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+    for phoneme in gruut_lang.phonemes:
+        # Try to guess WAV file name for phoneme
+        # Files from https://www.ipachart.com/
+        wav_path: typing.Optional[Path] = None
+        if phoneme.vowel:
+            height_str = phoneme.vowel.height.value
+            placement_str = phoneme.vowel.placement.value
+            rounded_str = "rounded" if phoneme.vowel.rounded else "unrounded"
+            wav_path = (
+                _WAV_DIR / f"{height_str}_{placement_str}_{rounded_str}_vowel.wav"
+            )
+        elif phoneme.consonant:
+            voiced_str = "voiced" if phoneme.consonant.voiced else "voiceless"
+            place_str = phoneme.consonant.place.value.replace("-", "")
+            type_str = phoneme.consonant.type.value.replace("-", "_")
+            wav_path = _WAV_DIR / f"{voiced_str}_{place_str}_{type_str}.wav"
+            if not wav_path.is_file():
+                # Try without voicing
+                wav_path = _WAV_DIR / f"{place_str}_{type_str}.wav"
+        elif phoneme.schwa:
+            if phoneme.schwa.r_coloured:
+                # Close enough to "r" (er in corn[er])
+                wav_path = _WAV_DIR / f"alveolar_approximant.wav"
+            else:
+                # ə
+                wav_path = _WAV_DIR / f"mid-central_vowel.wav"
+
+        phoneme_dict = {"example": phoneme.example}
+
+        if wav_path and wav_path.is_file():
+            # Augment with relative URL to WAV file
+            phoneme_dict["url"] = f"wav/{wav_path.name}"
+
+        phonemes[phoneme.text] = phoneme_dict
+
+    # {
+    #   "<PHONEME>": {
+    #     "example": "...",
+    #     "url": "wav/<voiced>_<place>_<type>.wav"
+    #   }
+    # }
+    return jsonify(phonemes)
+
+
 # -----------------------------------------------------------------------------
 
 # MaryTTS compatibility layer
@@ -374,7 +434,7 @@ _IMG_DIR = _DIR / "img"
 
 @app.route("/")
 async def app_index():
-    """Test page."""
+    """Main page."""
     return await render_template("index.html")
 
 
@@ -388,6 +448,12 @@ async def css(filename) -> Response:
 async def img(filename) -> Response:
     """Image static endpoint."""
     return await send_from_directory(_IMG_DIR, filename)
+
+
+@app.route("/wav/<path:filename>", methods=["GET"])
+async def wav(filename) -> Response:
+    """WAV audio static endpoint."""
+    return await send_from_directory(_WAV_DIR, filename)
 
 
 # Swagger UI
