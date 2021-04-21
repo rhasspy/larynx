@@ -304,7 +304,7 @@ async def app_vocoders() -> Response:
     return jsonify(vocoders)
 
 
-@app.route("/api/tts")
+@app.route("/api/tts", methods=["GET", "POST"])
 async def app_say() -> Response:
     """Speak text to WAV."""
     voice = request.args.get("voice", "")
@@ -321,13 +321,13 @@ async def app_say() -> Response:
 
     # Text can come from POST body or GET ?text arg
     if request.method == "POST":
-        text = request.data.decode()
+        text = (await request.data).decode()
     else:
         text = request.args.get("text")
 
     assert text, "No text provided"
 
-    vocoder = request.args.get("vocoder")
+    vocoder = request.args.get("vocoder", _DEFAULT_VOCODER)
 
     # Vocoder settings
     denoiser_strength = request.args.get("denoiserStrength")
@@ -404,7 +404,7 @@ async def api_phonemes():
 async def api_process():
     """MaryTTS-compatible /process endpoint"""
     if request.method == "POST":
-        data = parse_qs(request.get_data(as_text=True))
+        data = parse_qs((await request.data).decode())
         text = data.get("INPUT_TEXT", [""])[0]
         voice = data.get("VOICE", [""])[0]
     else:
