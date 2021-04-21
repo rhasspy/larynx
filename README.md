@@ -54,6 +54,16 @@ $ docker run -it -p 59125:5002 rhasspy/larynx:<LANG>
 
 The `/process` HTTP endpoint should now work for voices formatted as `<LANG>/<VOICE>` such as `en-us/harvard-glow_tts`.
 
+You can specify the vocoder by adding `;<VOCODER>` to the MaryTTS voice.
+
+For example: `en-us/harvard-glow_tts;hifi_gan:vctk_small` will use the lowest quality (but fastest) vocoder. This is usually necessary to get decent performance on a Raspberry Pi.
+
+Available vocoders are:
+
+* `hifi_gan:universal_large` (best quality, slowest, default)
+* `hifi_gan:vctk_medium` (medium quality)
+* `hifi_gan:vctk_small` (lowest quality, fastest)
+
 ## Python Installation
 
 ```sh

@@ -15,7 +15,6 @@ from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
 
-import gruut_ipa
 import hypercorn
 import numpy as np
 import quart_cors
@@ -411,7 +410,11 @@ async def api_process():
         text = request.args.get("INPUT_TEXT", "")
         voice = request.args.get("VOICE", "")
 
-    wav_bytes = await text_to_wav(text, voice, vocoder=_DEFAULT_VOCODER)
+    # <VOICE>;<VOCODER>
+    voice, vocoder = voice.split(";", maxsplit=1)
+    vocoder = vocoder or _DEFAULT_VOCODER
+
+    wav_bytes = await text_to_wav(text, voice, vocoder=vocoder)
 
     return Response(wav_bytes, mimetype="audio/wav")
 
