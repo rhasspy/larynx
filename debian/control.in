@@ -1,0 +1,8 @@
+Package: larynx-tts
+Version: @VERSION@
+Section: utils
+Priority: optional
+Depends: libatlas3-base,libopenblas-base,libgomp1,libatomic1
+Architecture: @DEBIAN_ARCH@
+Maintainer: Michael Hansen
+Description: Neural text to speech engine using the International Phonetic Alphabet
