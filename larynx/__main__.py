@@ -22,6 +22,9 @@ from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
 from .wavfile import write as wav_write
 
+_DIR = Path(__file__).parent
+_DEFAULT_VOICE_DIR = _DIR.parent / "local"
+
 _LOGGER = logging.getLogger("larynx")
 
 # -----------------------------------------------------------------------------
@@ -74,7 +77,7 @@ def main():
         args.output_naming = "id"
 
     # Load language
-    gruut_lang = gruut.Language.load(args.language)
+    gruut_lang = gruut.Language.load(args.language, data_dirs=[_DIR.parent / "gruut"])
     assert gruut_lang, f"Unsupported language: {args.language}"
 
     # Verify accent make is available
@@ -255,6 +258,21 @@ def get_args():
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
     )
     parser.add_argument(
+        "--voice", help="Name of voice (expected in <voice-dir>/<language>)"
+    )
+    parser.add_argument(
+        "--voice-dir", help="Directory with voices (format is <language>/<name_model>)"
+    )
+    parser.add_argument(
+        "--quality",
+        choices=["high", "medium", "low"],
+        default="high",
+        help="Vocoder quality (default: high)",
+    )
+    parser.add_argument(
+        "--list", action="store_true", help="List available voices/vocoders"
+    )
+    parser.add_argument(
         "--config", help="Path to JSON configuration file with audio settings"
     )
     parser.add_argument("--output-dir", help="Directory to write WAV file(s)")
@@ -363,10 +381,77 @@ def get_args():
     else:
         logging.basicConfig(level=logging.INFO)
 
-    # Ensure TTS model
-    tts_model_args = [v.value for v in TextToSpeechType]
+    if not args.voice_dir:
+        args.voice_dir = Path(_DEFAULT_VOICE_DIR)
+
+    def list_voices_vocoders():
+        """Print all vocoders and voices"""
+        vocoder_model_types = set(
+            v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM
+        )
+        for vocoder_dir in args.voice_dir.iterdir():
+            if not vocoder_dir.is_dir():
+                continue
+
+            if vocoder_dir.name in vocoder_model_types:
+                for model_dir in vocoder_dir.iterdir():
+                    if not model_dir.is_dir():
+                        continue
+
+                    print(
+                        "vocoder", vocoder_dir.name, model_dir.name, model_dir, sep="\t"
+                    )
+
+        for lang_dir in args.voice_dir.iterdir():
+            if not vocoder_dir.is_dir():
+                continue
+
+            if lang_dir.name not in vocoder_model_types:
+                for voice_dir in lang_dir.iterdir():
+                    if not voice_dir.is_dir():
+                        continue
+
+                    print("voice", lang_dir.name, voice_dir.name, voice_dir, sep="\t")
+
+    if args.list:
+        list_voices_vocoders()
+        sys.exit(0)
+
+    # Set defaults
     setattr(args, "tts_model_type", None)
     setattr(args, "tts_model", None)
+    setattr(args, "vocoder_model_type", None)
+    setattr(args, "vocoder_model", None)
+
+    if args.voice:
+        tts_model_dir = args.voice_dir / args.language / args.voice
+        assert tts_model_dir.is_dir(), f"Expected voice at {tts_model_dir}"
+        _LOGGER.debug("Using voice at %s", tts_model_dir)
+
+        # Get TTS model name from end of voice name.
+        # Example: harvard-glow_tts
+        tts_model_type = args.voice[args.voice.rfind("-") + 1 :]
+        setattr(args, "tts_model_type", tts_model_type)
+        setattr(args, "tts_model", str(tts_model_dir))
+
+    # Vocoder defaults
+    vocoder_model_type = "hifi_gan"
+    vocoder_model_name = "universal_large"
+    setattr(args, "vocoder_model_type", vocoder_model_type)
+
+    if args.quality == "medium":
+        vocoder_model_name = "vctk_medium"
+    elif args.quality == "low":
+        vocoder_model_name = "vctk_small"
+
+    vocoder_model_dir = args.voice_dir / vocoder_model_type / vocoder_model_name
+    setattr(args, "vocoder_model", str(vocoder_model_dir))
+
+    if vocoder_model_dir.is_dir():
+        _LOGGER.debug("Using vocoder at %s", vocoder_model_dir)
+
+    # Ensure TTS model
+    tts_model_args = [v.value for v in TextToSpeechType]
 
     for tts_model_arg in tts_model_args:
         tts_model_value = getattr(args, tts_model_arg)
@@ -378,12 +463,12 @@ def get_args():
             args.tts_model = tts_model_value
 
     if args.tts_model is None:
-        raise ValueError("A TTS model is required")
+        _LOGGER.fatal("A TTS model is required")
+        list_voices_vocoders()
+        sys.exit(1)
 
     # Check for vocoder model
     vocoder_model_args = [v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM]
-    setattr(args, "vocoder_model_type", None)
-    setattr(args, "vocoder_model", None)
 
     for vocoder_model_arg in vocoder_model_args:
         vocoder_model_value = getattr(args, vocoder_model_arg)
