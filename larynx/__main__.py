@@ -376,6 +376,9 @@ def get_args():
         help="Allow [[ phonemes ]] embedded in text",
     )
     parser.add_argument(
+        "--version", action="store_true", help="Print version and exit"
+    )
+    parser.add_argument(
         "--debug", action="store_true", help="Print DEBUG messages to the console"
     )
     args = parser.parse_args()
@@ -387,8 +390,20 @@ def get_args():
 
     # -------------------------------------------------------------------------
 
-    if not args.voices_dir:
-        args.voices_dir = Path(_DEFAULT_VOICES_DIR)
+    if args.version:
+        # Print version and exit
+        from . import __version__
+        print(__version__)
+        sys.exit(0)
+
+    # -------------------------------------------------------------------------
+
+    if args.voices_dir:
+        # Use --voices-dir
+        args.voices_dir = Path(args.voices_dir)
+    else:
+        # Use environment variable or default directory
+        args.voices_dir = Path(os.environ.get("LARYNX_VOICES_DIR", _DEFAULT_VOICES_DIR))
 
     def list_voices_vocoders():
         """Print all vocoders and voices"""
