@@ -1,0 +1,5 @@
+konnen_sie_bitte|Können Sie bitte langsamer sprechen?
+mir_geht_es_gut|Mir geht es gut, danke!
+haben_sie_ein_vegetarisches|Haben Sie ein vegetarisches Gericht?
+ich_bin_allergisch|Ich bin allergisch.
+fischers_fritze_fischt|Fischers Fritze fischt frische Fische; Frische Fische fischt Fischers Fritze.

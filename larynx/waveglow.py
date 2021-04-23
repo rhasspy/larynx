@@ -51,6 +51,7 @@ class WaveGlowVocoder(VocoderModel):
         z = self.make_z(mels)
         audio = self.waveglow.run(None, {"mel": mels, "z": z})[0]
 
+        denoiser_strength = self.denoiser_strength
         if settings:
             denoiser_strength = float(
                 settings.get("denoiser_strength", self.denoiser_strength)

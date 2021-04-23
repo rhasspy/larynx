@@ -1,5 +1,6 @@
 import itertools
 import logging
+import re
 import time
 import typing
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +21,7 @@ from .constants import (
     VocoderModelConfig,
     VocoderType,
 )
+from .utils import _IPA_TRANSLATE
 
 _LOGGER = logging.getLogger("larynx")
 
@@ -28,6 +30,8 @@ _DIR = Path(__file__).parent
 __version__ = (_DIR / "VERSION").read_text().strip()
 
 # -----------------------------------------------------------------------------
+
+_INLINE_PHONEMES_PATTERN = re.compile(r"\B\[\[([^\]]+)\]\]\B")
 
 
 def text_to_speech(
@@ -43,6 +47,7 @@ def text_to_speech(
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     native_lang: typing.Optional[gruut.Language] = None,
     max_workers: typing.Optional[int] = 2,
+    inline_phonemes: bool = False,
 ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
     tokenizer = gruut_lang.tokenizer
@@ -65,86 +70,132 @@ def text_to_speech(
 
         setattr(phoneme_lang, "phoneme_to_id", phoneme_to_id)
 
-    all_sentences = list(
-        tokenizer.tokenize(
-            text,
-            number_converters=number_converters,
-            replace_currency=(not disable_currency),
-        )
-    )
+    # -------------------------------------------------------------------------
+    # Inline Phonemes
+    # -------------------------------------------------------------------------
 
-    # Process sentences in separate threads concurrently
-    futures = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for sentence in all_sentences:
-            # Phonemize each sentence
-            sentence_prons = phonemizer.phonemize(
-                sentence.tokens, word_indexes=word_indexes, word_breaks=True
+    inline_phoneme_words: typing.Dict[str, typing.List[str]] = {}
+
+    if inline_phonemes:
+
+        # Replace [[ phonemes ]] with __phonemes_N__ "words"
+        # These "words" are temporarily added to the lexicon for phonemization,
+        # then removed.
+        def replace_phonemes(match: re.Match) -> str:
+            ipa = match.group(1)
+            ipa = ipa.translate(_IPA_TRANSLATE)
+            word_pron = [
+                p.text
+                for p in gruut_lang.phonemes.split(
+                    ipa, keep_stress=gruut_lang.keep_stress
+                )
+            ]
+
+            inline_num = len(inline_phoneme_words)
+            inline_key = f"__phonemes_{inline_num}__"
+            inline_phoneme_words[inline_key] = word_pron
+
+            return inline_key
+
+        text = _INLINE_PHONEMES_PATTERN.sub(replace_phonemes, text)
+
+        # Augment lexicon temporarily
+        for inline_key, inline_pron in inline_phoneme_words.items():
+            phonemizer.lexicon[inline_key] = [
+                gruut.utils.WordPronunciation(phonemes=inline_pron)
+            ]
+
+    # -------------------------------------------------------------------------
+    # Tokenization/Phonemization
+    # -------------------------------------------------------------------------
+
+    try:
+        all_sentences = list(
+            tokenizer.tokenize(
+                text,
+                number_converters=number_converters,
+                replace_currency=(not disable_currency),
             )
+        )
 
-            # Pick first pronunciation for each word
-            first_pron = []
-            for word_prons in sentence_prons:
-                if word_prons:
-                    for phoneme in word_prons[0].phonemes:
-                        if not phoneme:
-                            continue
+        # Process sentences in separate threads concurrently
+        futures = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for sentence in all_sentences:
+                # Phonemize each sentence
+                sentence_prons = phonemizer.phonemize(
+                    sentence.tokens, word_indexes=word_indexes, word_breaks=True
+                )
 
-                        # Split out stress ("ˈa" -> "ˈ", "a")
-                        # Loop because languages like Swedish can have multiple
-                        # accents on a single phoneme.
-                        while phoneme and (
-                            gruut_ipa.IPA.is_stress(phoneme[0])
-                            or gruut_ipa.IPA.is_accent(phoneme[0])
-                        ):
-                            first_pron.append(phoneme[0])
-                            phoneme = phoneme[1:]
+                # Pick first pronunciation for each word
+                first_pron = []
+                for word_prons in sentence_prons:
+                    if word_prons:
+                        for phoneme in word_prons[0].phonemes:
+                            if not phoneme:
+                                continue
 
-                        first_pron.append(phoneme)
+                            # Split out stress ("ˈa" -> "ˈ", "a")
+                            # Loop because languages like Swedish can have multiple
+                            # accents on a single phoneme.
+                            while phoneme and (
+                                gruut_ipa.IPA.is_stress(phoneme[0])
+                                or gruut_ipa.IPA.is_accent(phoneme[0])
+                            ):
+                                first_pron.append(phoneme[0])
+                                phoneme = phoneme[1:]
 
-            if not first_pron:
-                # No phonemes
-                continue
+                            first_pron.append(phoneme)
 
-            # Ensure sentence ends with major break
-            if first_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
+                if not first_pron:
+                    # No phonemes
+                    continue
+
+                # Ensure sentence ends with major break
+                if first_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
+                    first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+
+                # Add another major break for good measure
                 first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
-            # Add another major break for good measure
-            first_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+                text_phonemes: typing.Iterable[str] = first_pron
 
-            text_phonemes: typing.Iterable[str] = first_pron
+                if accent_map:
+                    # Map to different phoneme set
+                    text_phonemes = itertools.chain(
+                        *[accent_map.get(p, p) for p in first_pron]
+                    )
 
-            if accent_map:
-                # Map to different phoneme set
-                text_phonemes = itertools.chain(
-                    *[accent_map.get(p, p) for p in first_pron]
+                # ---------------------------------------------------------------------
+
+                _LOGGER.debug(
+                    "Words for '%s': %s", sentence.raw_text, sentence.clean_words
                 )
+                _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
+
+                # Convert to phoneme ids
+                phoneme_ids = np.array([phoneme_to_id[p] for p in text_phonemes])
+
+                future = executor.submit(
+                    _sentence_task,
+                    phoneme_ids,
+                    audio_settings,
+                    tts_model,
+                    tts_settings,
+                    vocoder_model,
+                    vocoder_settings,
+                )
+                futures[future] = sentence.raw_text
 
             # ---------------------------------------------------------------------
 
-            _LOGGER.debug("Words for '%s': %s", sentence.raw_text, sentence.clean_words)
-            _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
-
-            # Convert to phoneme ids
-            phoneme_ids = np.array([phoneme_to_id[p] for p in text_phonemes])
-
-            future = executor.submit(
-                _sentence_task,
-                phoneme_ids,
-                audio_settings,
-                tts_model,
-                tts_settings,
-                vocoder_model,
-                vocoder_settings,
-            )
-            futures[future] = sentence.raw_text
-
-        # ---------------------------------------------------------------------
-
-        for future, raw_text in futures.items():
-            audio = future.result()
-            yield raw_text, audio
+            for future, raw_text in futures.items():
+                audio = future.result()
+                yield raw_text, audio
+    finally:
+        # Clean up inline phonemes from lexicon
+        for inline_key in inline_phoneme_words:
+            del phonemizer.lexicon[inline_key]
 
 
 # -----------------------------------------------------------------------------
@@ -193,10 +244,10 @@ def _sentence_task(
 
     audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
     infer_sec = vocoder_end_time - tts_start_time
-    real_time_factor = audio_duration_sec / infer_sec
+    real_time_factor = infer_sec / audio_duration_sec if audio_duration_sec > 0 else 0.0
 
     _LOGGER.debug(
-        "Real-time factor: %0.2f (audio=%0.2f sec, infer=%0.2f sec)",
+        "Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)",
         real_time_factor,
         audio_duration_sec,
         infer_sec,

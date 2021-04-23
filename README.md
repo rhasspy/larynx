@@ -15,13 +15,64 @@ Larynx's goals are:
 
 [Listen to voice samples](https://rhasspy.github.io/larynx/) from all of the [pre-trained models](https://github.com/rhasspy/larynx/releases).
 
-## Installation
+## Docker Installation
+
+Pre-built Docker images for each language are available for the following platforms:
+
+* `linux/amd64` - desktop/laptop/server
+* `linux/arm64` - Raspberry Pi 64-bit
+* `linux/arm/v7` - Raspberry Pi 32-bit
+
+Run the Larynx web server with:
+
+```sh
+$ docker run -it -p 5002:5002 rhasspy/larynx:<LANG>
+```
+
+where `<LANG>` is one of:
+
+* `de-de` - German
+* `en-us` - U.S. English
+* `es-es` - Spanish
+* `fr-fr` - French
+* `it-it` - Italian
+* `nl` - Dutch
+* `ru-ru` - Russian
+* `sv-se` - Swedish
+
+Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi/ for HTTP endpoint documentation.
+
+A larger docker image with all languages is also available as `rhasspy/larynx`
+
+### MaryTTS Compatible API
+
+To use Larynx as a drop-in replacement for a [MaryTTS](http://mary.dfki.de/) server (e.g., for use with [Home Assistant](https://www.home-assistant.io/integrations/marytts/)), run:
+
+```sh
+$ docker run -it -p 59125:5002 rhasspy/larynx:<LANG>
+```
+
+The `/process` HTTP endpoint should now work for voices formatted as `<LANG>/<VOICE>` such as `en-us/harvard-glow_tts`.
+
+You can specify the vocoder by adding `;<VOCODER>` to the MaryTTS voice.
+
+For example: `en-us/harvard-glow_tts;hifi_gan:vctk_small` will use the lowest quality (but fastest) vocoder. This is usually necessary to get decent performance on a Raspberry Pi.
+
+Available vocoders are:
+
+* `hifi_gan:universal_large` (best quality, slowest, default)
+* `hifi_gan:vctk_medium` (medium quality)
+* `hifi_gan:vctk_small` (lowest quality, fastest)
+
+## Python Installation
 
 ```sh
 $ pip install larynx
 ```
 
 For Raspberry Pi (ARM), you will first need to [manually install phonetisaurus](https://github.com/rhasspy/phonetisaurus-pypi/releases).
+
+For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/download/v1.0/onnxruntime-1.6.0-cp37-cp37m-linux_armv7l.whl) is available (64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
 
 ### Language Download
 
@@ -81,7 +132,7 @@ You can use the `--interactive` flag instead of `--output-dir` to type sentences
 The GlowTTS voices support two additional parameters:
 
 * `--noise-scale` - determines the speaker volatility during synthesis (0-1, default is  0.333)
-* `--length-scale` - makes the voice speaker slower (< 1) or faster (> 1)
+* `--length-scale` - makes the voice speaker slower (> 1) or faster (< 1)
 
 ### Vocoder Settings
 
@@ -113,6 +164,9 @@ The GlowTTS voices support two additional parameters:
         * ljspeech (F, [Public Domain](https://librivox.org/pages/public-domain/))
     * German (`de-de`, 1 voice)
         * thorsten (M, [CC0](licenses/cc0.txt))
+        * eva_k (F, [M-AILabs](licenses/m-ailabs.txt))
+        * karlsson (M, [M-AILabs](licenses/m-ailabs.txt))
+        * rebecca\_braunert\_plunkett (F, [M-AILabs](licenses/m-ailabs.txt))
     * French (`fr-fr`, 3 voices)
         * gilles\_le\_blanc (M, [M-AILabs](licenses/m-ailabs.txt))
         * siwis (F, [CC/Attr](licenses/cc4a.txt))

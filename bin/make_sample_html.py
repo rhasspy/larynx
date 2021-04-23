@@ -95,7 +95,7 @@ def main():
                         continue
 
                     print("<p>", text, "</p>")
-                    print(f'<audio controls src="{wav_path}"></audio>')
+                    print(f'<audio preload="none" controls src="{wav_path}"></audio>')
                     print("<br>")
 
             print("<br>")
