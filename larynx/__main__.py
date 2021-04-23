@@ -257,13 +257,14 @@ def get_args():
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
     )
     parser.add_argument(
-        "--voice", help="Name of voice (expected in <voice-dir>/<language>)"
+        "--voice", "-v", help="Name of voice (expected in <voice-dir>/<language>)"
     )
     parser.add_argument(
         "--voice-dir", help="Directory with voices (format is <language>/<name_model>)"
     )
     parser.add_argument(
         "--quality",
+        "-q",
         choices=["high", "medium", "low"],
         default="high",
         help="Vocoder quality (default: high)",
@@ -409,7 +410,7 @@ def get_args():
                     )
 
         for lang_dir in args.voice_dir.iterdir():
-            if not vocoder_dir.is_dir():
+            if not lang_dir.is_dir():
                 continue
 
             if lang_dir.name not in vocoder_model_types:
