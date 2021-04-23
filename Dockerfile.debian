@@ -21,7 +21,7 @@ RUN apt-get update && \
 ADD download/Python-3.7.10.tar.xz /build
 
 RUN cd /build/Python-3.7.10 && \
-    ./configure --enable-optimizations && \
+    ./configure && \
     make -j 4 && \
     make install DESTDIR=/usr/lib/larynx-tts
 
@@ -66,18 +66,25 @@ ENV BUILD_APP_DIR=${BUILD_DIR}/larynx-tts/${APP_DIR}
 RUN mkdir -p ${BUILD_DIR}/larynx-tts/usr/lib && \
     cp -R ${APP_DIR} ${BUILD_DIR}/larynx-tts/usr/lib/
 
+# Copy default voices/vocoders
+COPY local/ ${BUILD_DIR}/larynx-tts/${APP_DIR}/local/
+
 # Copy Larynx source
 COPY licenses/ ${BUILD_APP_DIR}/licenses/
 COPY larynx/ ${BUILD_APP_DIR}/larynx/
 COPY README.md LICENSE ${BUILD_APP_DIR}/
 
 COPY debian/control.in /
-RUN export DEBIAN_ARCH="$(dpkg-architecture | grep DEB_BUILD_ARCH= | sed -e 's/[^=]\\+=//')" && \
-    export VERSION="$(cat ${BUILD_DIR}/larynx-tts/${APP_DIR}/larynx/VERSION)" && \
+
+ARG TARGETARCH
+ARG TARGETVARIANT
+ENV DEBIAN_ARCH=${TARGETARCH}${TARGETVARIANT}
+RUN export VERSION="$(cat ${BUILD_DIR}/larynx-tts/${APP_DIR}/larynx/VERSION)" && \
+    if [ "${DEBIAN_ARCH}" = 'armv7' ]; then export DEBIAN_ARCH='armhf'; fi && \
     mkdir -p ${BUILD_DIR}/larynx-tts/DEBIAN && \
     sed -e s"/@VERSION@/${VERSION}/" -e "s/@DEBIAN_ARCH@/${DEBIAN_ARCH}/" < /control.in > ${BUILD_DIR}/larynx-tts/DEBIAN/control
 
-COPY debian/larynx-tts debian/larynx-tts-server ${BUILD_DIR}/larynx-tts/usr/bin/
+COPY debian/larynx debian/larynx-server ${BUILD_DIR}/larynx-tts/usr/bin/
 RUN chmod +x ${BUILD_DIR}/larynx-tts/usr/bin/*
 
 RUN cd ${BUILD_DIR} && \
