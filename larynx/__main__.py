@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+import platform
 import string
 import subprocess
 import sys
@@ -344,7 +345,10 @@ def get_args():
     parser.add_argument("--waveglow", help="Path to WaveGlow onnx model")
 
     parser.add_argument(
-        "--no-optimizations", action="store_true", help="Disable Onnx optimizations"
+        "--optimizations",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help="Enable/disable Onnx optimizations (auto=disable on armv7l)",
     )
     parser.add_argument(
         "--denoiser-strength",
@@ -521,6 +525,16 @@ def get_args():
 
     if args.config:
         args.config = Path(args.config)
+
+    # Handle optimizations.
+    # onnxruntime crashes on armv7l if optimizations are enabled.
+    setattr(args, "no_optimizations", False)
+    if args.optimizations == "off":
+        args.no_optimizations = True
+    elif args.optimizations == "auto":
+        if platform.machine() == "armv7l":
+            # Enabling optimizations on 32-bit ARM crashes
+            args.no_optimizations = True
 
     _LOGGER.debug(args)
 
