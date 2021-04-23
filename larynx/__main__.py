@@ -77,7 +77,8 @@ def main():
         args.output_naming = "id"
 
     # Load language
-    gruut_lang = gruut.Language.load(args.language, data_dirs=[_DIR.parent / "gruut"])
+    gruut_data_dirs = [_DIR.parent / "gruut"] + gruut.Language.get_data_dirs()
+    gruut_lang = gruut.Language.load(args.language, data_dirs=gruut_data_dirs)
     assert gruut_lang, f"Unsupported language: {args.language}"
 
     # Verify accent make is available
@@ -252,7 +253,7 @@ def get_args():
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(prog="larynx")
     parser.add_argument(
-        "--language", required=True, help="Gruut language for text input (en-us, etc.)"
+        "--language", help="Gruut language for text input (en-us, etc.)"
     )
     parser.add_argument(
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
@@ -381,6 +382,8 @@ def get_args():
     else:
         logging.basicConfig(level=logging.INFO)
 
+    # -------------------------------------------------------------------------
+
     if not args.voice_dir:
         args.voice_dir = Path(_DEFAULT_VOICE_DIR)
 
@@ -417,6 +420,8 @@ def get_args():
         list_voices_vocoders()
         sys.exit(0)
 
+    # -------------------------------------------------------------------------
+
     # Set defaults
     setattr(args, "tts_model_type", None)
     setattr(args, "tts_model", None)
@@ -424,8 +429,20 @@ def get_args():
     setattr(args, "vocoder_model", None)
 
     if args.voice:
-        tts_model_dir = args.voice_dir / args.language / args.voice
-        assert tts_model_dir.is_dir(), f"Expected voice at {tts_model_dir}"
+        tts_model_dir: typing.Optional[Path] = None
+
+        if args.language:
+            # Use directory under language
+            tts_model_dir = args.voice_dir / args.language / args.voice
+            assert tts_model_dir.is_dir(), f"Expected voice at {tts_model_dir}"
+        else:
+            # Search for voice
+            for model_dir in args.voice_dir.rglob(args.voice):
+                if model_dir.is_dir():
+                    tts_model_dir = model_dir
+                    break
+
+        assert tts_model_dir is not None, f"Voice not found: {args.voice}"
         _LOGGER.debug("Using voice at %s", tts_model_dir)
 
         # Get TTS model name from end of voice name.
@@ -466,6 +483,12 @@ def get_args():
         _LOGGER.fatal("A TTS model is required")
         list_voices_vocoders()
         sys.exit(1)
+
+    if not args.language:
+        # Set language based on voice
+        lang = Path(args.tts_model).parent.name
+        setattr(args, "language", lang)
+        _LOGGER.debug("Language: %s", lang)
 
     # Check for vocoder model
     vocoder_model_args = [v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM]
