@@ -23,7 +23,7 @@ from .utils import _IPA_TRANSLATE
 from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
-_DEFAULT_VOICE_DIR = _DIR.parent / "local"
+_DEFAULT_VOICES_DIR = _DIR.parent / "local"
 
 _LOGGER = logging.getLogger("larynx")
 
@@ -260,7 +260,7 @@ def get_args():
         "--voice", help="Name of voice (expected in <voice-dir>/<language>)"
     )
     parser.add_argument(
-        "--voice-dir", help="Directory with voices (format is <language>/<name_model>)"
+        "--voices-dir", help="Directory with voices (format is <language>/<name_model>)"
     )
     parser.add_argument(
         "--quality",
@@ -387,15 +387,17 @@ def get_args():
 
     # -------------------------------------------------------------------------
 
-    if not args.voice_dir:
-        args.voice_dir = Path(_DEFAULT_VOICE_DIR)
+    if not args.voices_dir:
+        args.voices_dir = Path(_DEFAULT_VOICES_DIR)
 
     def list_voices_vocoders():
         """Print all vocoders and voices"""
         vocoder_model_types = set(
             v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM
         )
-        for vocoder_dir in args.voice_dir.iterdir():
+
+        # Print vocoders
+        for vocoder_dir in args.voices_dir.iterdir():
             if not vocoder_dir.is_dir():
                 continue
 
@@ -408,7 +410,8 @@ def get_args():
                         "vocoder", vocoder_dir.name, model_dir.name, model_dir, sep="\t"
                     )
 
-        for lang_dir in args.voice_dir.iterdir():
+        # Print voices
+        for lang_dir in args.voices_dir.iterdir():
             if not vocoder_dir.is_dir():
                 continue
 
@@ -436,11 +439,11 @@ def get_args():
 
         if args.language:
             # Use directory under language
-            tts_model_dir = args.voice_dir / args.language / args.voice
+            tts_model_dir = args.voices_dir / args.language / args.voice
             assert tts_model_dir.is_dir(), f"Expected voice at {tts_model_dir}"
         else:
             # Search for voice
-            for model_dir in args.voice_dir.rglob(args.voice):
+            for model_dir in args.voices_dir.rglob(args.voice):
                 if model_dir.is_dir():
                     tts_model_dir = model_dir
                     break
@@ -464,7 +467,7 @@ def get_args():
     elif args.quality == "low":
         vocoder_model_name = "vctk_small"
 
-    vocoder_model_dir = args.voice_dir / vocoder_model_type / vocoder_model_name
+    vocoder_model_dir = args.voices_dir / vocoder_model_type / vocoder_model_name
     setattr(args, "vocoder_model", str(vocoder_model_dir))
 
     if vocoder_model_dir.is_dir():
