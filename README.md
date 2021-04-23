@@ -1,6 +1,10 @@
 # Larynx
 
-End-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/).
+End-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/). There are [40 voices available across 8 languages](#samples).
+
+```sh
+$ docker run -it -p 5002:5002 rhasspy/larynx:en-us
+```
 
 ![Larynx screenshot](img/web_screenshot.png)
 
@@ -14,6 +18,8 @@ Larynx's goals are:
 ## Samples
 
 [Listen to voice samples](https://rhasspy.github.io/larynx/) from all of the [pre-trained models](https://github.com/rhasspy/larynx/releases).
+
+---
 
 ## Docker Installation
 
@@ -44,6 +50,76 @@ Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi
 
 A larger docker image with all languages is also available as `rhasspy/larynx`
 
+## Debian Installation
+
+Pre-built Debian packages are [available for download](https://github.com/rhasspy/larynx/releases/tag/v0.4.0).
+
+There are three different kinds of packages, so you can install exactly what you want and no more:
+
+* `larynx-tts_<VERSION>_<ARCH>.deb`
+    * Base Larynx code and dependencies (always required)
+    * `ARCH` is one of `amd64` (most desktops, laptops), `armhf` (32-bit Raspberry Pi), `arm64` (64-bit Raspberry Pi)
+* `larynx-tts-lang-<LANG>_<VERSION>_all.deb`
+    * Language-specific data files (at least one required)
+    * See [above](#docker-installation) for a list of languages
+* `larynx-tts-voice-<VOICE>_<VERSION>_all.deb`
+    * Voice-specific model files (at least one required)
+    * See [samples](#samples) to decide which voice(s) to choose
+    
+As an example, let's say you want to use the "harvard-glow_tts" voice for English on an `amd64` laptop for Larynx version 0.4.0.
+You would need to download these files:
+
+1. [`larynx-tts_0.4.0_amd64.deb`](https://github.com/rhasspy/larynx/releases/download/v0.4.0/larynx-tts_0.4.0_amd64.deb)
+2. [`larynx-tts-lang-en-us_0.4.0_all.deb`](https://github.com/rhasspy/larynx/releases/download/v0.4.0/larynx-tts-lang-en-us_0.4.0_all.deb)
+3. [`larynx-tts-voice-en-us-harvard-glow-tts_0.4.0_all.deb`](https://github.com/rhasspy/larynx/releases/download/v0.4.0/larynx-tts-voice-en-us-harvard-glow-tts_0.4.0_all.deb)
+
+Once downloaded, you can install the packages all at once with:
+
+```sh
+sudo apt install \
+  ./larynx-tts_0.4.0_amd64.deb \
+  ./larynx-tts-lang-en-us_0.4.0_all.deb \
+  ./larynx-tts-voice-en-us-harvard-glow-tts_0.4.0_all.deb
+```
+
+From there, you may run the `larynx` command or `larynx-server` to start the web server.
+
+## Python Installation
+
+```sh
+$ pip install larynx
+```
+
+For Raspberry Pi (ARM), you will first need to [manually install phonetisaurus](https://github.com/rhasspy/phonetisaurus-pypi/releases).
+
+For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/download/v1.0/) is available (official 64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
+
+### Language Download
+
+Larynx uses [gruut](https://github.com/rhasspy/gruut) to transform text into phonemes. You must install the appropriate gruut language before using Larynx. U.S. English is included with gruut, but for other languages:
+
+```sh
+$ python3 -m gruut <LANGUAGE> download
+```
+
+### Voice/Vocoder Download
+
+Voices and vocoders are available to download from the [release page](https://github.com/rhasspy/larynx/releases). They can be extracted anywhere, and the directory simply needs to be referenced in the command-line (e,g, `--glow-tts /path/to/voice`).
+
+---
+
+## Web Server
+
+You can run a local web server with:
+
+```sh
+$ python3 -m larynx.server --voices-dir /path/to/voices
+```
+
+Visit http://localhost:5002 to view the site and try out voices. See http://localhost/5002/openapi for documentation on the available HTTP endpoints.
+
+See `--help` for more options.
+
 ### MaryTTS Compatible API
 
 To use Larynx as a drop-in replacement for a [MaryTTS](http://mary.dfki.de/) server (e.g., for use with [Home Assistant](https://www.home-assistant.io/integrations/marytts/)), run:
@@ -64,39 +140,6 @@ Available vocoders are:
 * `hifi_gan:vctk_medium` (medium quality)
 * `hifi_gan:vctk_small` (lowest quality, fastest)
 
-## Python Installation
-
-```sh
-$ pip install larynx
-```
-
-For Raspberry Pi (ARM), you will first need to [manually install phonetisaurus](https://github.com/rhasspy/phonetisaurus-pypi/releases).
-
-For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/download/v1.0/onnxruntime-1.6.0-cp37-cp37m-linux_armv7l.whl) is available (64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
-
-### Language Download
-
-Larynx uses [gruut](https://github.com/rhasspy/gruut) to transform text into phonemes. You must install the appropriate gruut language before using Larynx. U.S. English is included with gruut, but for other languages:
-
-```sh
-$ python3 -m gruut <LANGUAGE> download
-```
-
-### Voice/Vocoder Download
-
-Voices and vocoders are available to download from the [release page](https://github.com/rhasspy/larynx/releases). They can be extracted anywhere, and the directory simply needs to be referenced in the command-line (e,g, `--glow-tts /path/to/voice`).
-
-## Web Server
-
-You can run a local web server with:
-
-```sh
-$ python3 -m larynx.server --voices-dir /path/to/voices
-```
-
-Visit http://localhost:5002 to view the site and try out voices. See http://localhost/5002/openapi for documentation on the available HTTP endpoints.
-
-See `--help` for more options.
 
 ## Command-Line Example
 
@@ -118,14 +161,13 @@ EOF
   larynx \
     --debug \
     --csv \
-    --glow-tts local/en-us/harvard-glow_tts \
-    --hifi-gan local/hifi_gan/universal_large \
+    --voice harvard-glow_tts \
+    --quality high \
     --output-dir wavs \
-    --language en-us \
     --denoiser-strength 0.001
 ```
 
-You can use the `--interactive` flag instead of `--output-dir` to type sentences and have the audio played immediately using `sox`.
+You can use the `--interactive` flag instead of `--output-dir` to type sentences and have the audio played immediately using the `play` command from `sox`.
 
 ### GlowTTS Settings
 
@@ -137,6 +179,14 @@ The GlowTTS voices support two additional parameters:
 ### Vocoder Settings
 
 * `--denoiser-strength` - runs the denoiser if > 0; a small value like 0.005 is recommended.
+
+### List Voices and Vocoders
+
+```sh
+$ larynx --list
+```
+
+---
 
 ## Text to Speech Models
 
