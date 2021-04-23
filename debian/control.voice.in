@@ -1,0 +1,8 @@
+Package: larynx-tts-voice-@LANGUAGE@-@VOICE@
+Version: @VERSION@
+Section: utils
+Priority: optional
+Depends: larynx-tts-lang-@LANGUAGE@ (>= @VERSION@)
+Architecture: all
+Maintainer: Michael Hansen
+Description: Larynx TTS voice @VOICE@ for @LANGUAGE_NAME@

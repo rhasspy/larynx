@@ -1,17 +1,8 @@
 #!/bin/bash
-GRUUT_LANG='@LANGUAGE@'
 APPDIR='/usr/lib/larynx-tts'
 
 export PATH="${APPDIR}/bin:${APPDIR}/usr/local/bin:${PATH}"
 export LD_LIBRARY_PATH="${APPDIR}/lib:${APPDIR}/usr/local/lib:${LD_LIBRARY_PATH}"
 export PYTHONPATH="${APPDIR}:${PYTHON_PATH}"
 
-args=()
-
-if [[ -n "${GRUUT_LANG}" ]]; then
-    args+=('--language' "${GRUUT_LANG}")
-fi
-
-args+=("$@")
-
-python3 -m larynx "${args[@]}"
+python3 -m larynx "$@"

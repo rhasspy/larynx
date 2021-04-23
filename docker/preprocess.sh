@@ -16,8 +16,19 @@ while read line || [ -n "${line}" ];
 do
     if [[ "${line}" =~ ${ifdef_regex} ]]; then
         name="${BASH_REMATCH[1]}"
+        drop_line=''
         if [[ -z "${!name}" ]]; then
             drop_line='1'
+        fi
+
+        # Don't output preprocessor directive
+        continue
+    elif [[ "${line}" == '# ELSE' ]]; then
+        # Invert
+        if [[ -z "${drop_line}" ]]; then
+            drop_line='1'
+        else
+            drop_line=''
         fi
 
         # Don't output preprocessor directive

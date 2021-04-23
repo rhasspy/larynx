@@ -66,44 +66,44 @@ echo 'Building...'
 DOCKERIGNORE="${src_dir}/.dockerignore"
 cp -f "${src_dir}/.dockerignore.in" "${DOCKERIGNORE}"
 
-if [[ -n "${LANGUAGE}" ]]; then
-    # One language (exclude en-us since it's already included)
-    if [[ ! "${LANGUAGE}" == 'en-us' ]]; then
-        echo "!gruut/${LANGUAGE}" >> "${DOCKERIGNORE}"
-    else
-        # Need one file in the directory
-        echo '!gruut/.gitkeep' >> "${DOCKERIGNORE}"
-    fi
+# if [[ -n "${LANGUAGE}" ]]; then
+#     # One language (exclude en-us since it's already included)
+#     if [[ ! "${LANGUAGE}" == 'en-us' ]]; then
+#         echo "!gruut/${LANGUAGE}" >> "${DOCKERIGNORE}"
+#     else
+#         # Need one file in the directory
+#         echo '!gruut/.gitkeep' >> "${DOCKERIGNORE}"
+#     fi
 
-    tags+=('--tag' "${TAG_PREFIX}:${LANGUAGE}")
-    tags+=('--tag' "${TAG_PREFIX}:${version}-${LANGUAGE}")
-else
-    # All languages
-    echo '!gruut/' >> "${DOCKERIGNORE}"
-    tags+=('--tag' "${TAG_PREFIX}")
-    tags+=('--tag' "${TAG_PREFIX}:${version}")
-fi
+#     tags+=('--tag' "${TAG_PREFIX}:${LANGUAGE}")
+#     tags+=('--tag' "${TAG_PREFIX}:${version}-${LANGUAGE}")
+# else
+#     # All languages
+#     echo '!gruut/' >> "${DOCKERIGNORE}"
+#     tags+=('--tag' "${TAG_PREFIX}")
+#     tags+=('--tag' "${TAG_PREFIX}:${version}")
+# fi
 
-if [[ -z "${VOICES}" ]]; then
-    if [[ -n "${LANGUAGE}" ]]; then
-        # All voices (one language)
-        echo "!local/${LANGUAGE}" >> "${DOCKERIGNORE}"
-    else
-        # All voices (all languages)
-        echo '!local/' >> "${DOCKERIGNORE}"
-    fi
-else
-    # Specific voices in language
-    IFS=',' read -ra voices <<< "${VOICES}"
+# if [[ -z "${VOICES}" ]]; then
+#     if [[ -n "${LANGUAGE}" ]]; then
+#         # All voices (one language)
+#         echo "!local/${LANGUAGE}" >> "${DOCKERIGNORE}"
+#     else
+#         # All voices (all languages)
+#         echo '!local/' >> "${DOCKERIGNORE}"
+#     fi
+# else
+#     # Specific voices in language
+#     IFS=',' read -ra voices <<< "${VOICES}"
 
-    # One or more voices (comma-separated)
-    for voice in "${voices[@]}"; do
-        echo "!local/${LANGUAGE}/${voice}" >> "${DOCKERIGNORE}"
-    done < <(echo "${VOICES}")
-fi
+#     # One or more voices (comma-separated)
+#     for voice in "${voices[@]}"; do
+#         echo "!local/${LANGUAGE}/${voice}" >> "${DOCKERIGNORE}"
+#     done < <(echo "${VOICES}")
+# fi
 
-# Exclude Waveglow for now
-echo 'local/waveglow' >> "${DOCKERIGNORE}"
+# # Exclude Waveglow for now
+# echo 'local/waveglow' >> "${DOCKERIGNORE}"
 
 if [[ -n "${NOBUILDX}" ]]; then
     # Don't use docker buildx (single platform)
@@ -138,7 +138,6 @@ if [[ -n "${NOBUILDX}" ]]; then
            -f "${DOCKERFILE}" \
            --build-arg "TARGETARCH=${TARGETARCH}" \
            --build-arg "TARGETVARIANT=${TARGETVARIANT}" \
-           --build-arg "LANGUAGE=${LANGUAGE}" \
            --tag "${tag}" \
            "$@"
 
@@ -158,7 +157,6 @@ else
     docker buildx build \
            "${src_dir}" \
            -f "${DOCKERFILE}" \
-           --build-arg "LANGUAGE=${LANGUAGE}" \
            "--platform=${PLATFORMS}" \
            --output "type=local,dest=${dist_dir}" \
            "$@"

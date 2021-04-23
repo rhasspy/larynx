@@ -21,7 +21,7 @@ RUN apt-get update && \
 ADD download/Python-3.7.10.tar.xz /build
 
 RUN cd /build/Python-3.7.10 && \
-    ./configure && \
+    ./configure --enable-optimizations && \
     make -j 4 && \
     make install DESTDIR=/usr/lib/larynx-tts
 
@@ -37,7 +37,7 @@ FROM debian:buster-slim as build
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
-        libssl1.1 dpkg-dev
+        build-essential libssl1.1 dpkg-dev
 
 ENV APP_DIR=/usr/lib/larynx-tts
 
@@ -66,12 +66,6 @@ ENV BUILD_APP_DIR=${BUILD_DIR}/larynx-tts/${APP_DIR}
 RUN mkdir -p ${BUILD_DIR}/larynx-tts/usr/lib && \
     cp -R ${APP_DIR} ${BUILD_DIR}/larynx-tts/usr/lib/
 
-# Copy voices
-COPY local/ ${BUILD_APP_DIR}/local/
-
-# Copy gruut language data
-COPY gruut/ ${BUILD_APP_DIR}/gruut/
-
 # Copy Larynx source
 COPY licenses/ ${BUILD_APP_DIR}/licenses/
 COPY larynx/ ${BUILD_APP_DIR}/larynx/
@@ -83,10 +77,8 @@ RUN export DEBIAN_ARCH="$(dpkg-architecture | grep DEB_BUILD_ARCH= | sed -e 's/[
     mkdir -p ${BUILD_DIR}/larynx-tts/DEBIAN && \
     sed -e s"/@VERSION@/${VERSION}/" -e "s/@DEBIAN_ARCH@/${DEBIAN_ARCH}/" < /control.in > ${BUILD_DIR}/larynx-tts/DEBIAN/control
 
-ARG LANGUAGE
-COPY debian/larynx-tts.in /
-RUN mkdir -p ${BUILD_DIR}/larynx-tts/usr/bin && \
-    sed -e s"/@LANGUAGE@/${LANGUAGE}/" < /larynx-tts.in > ${BUILD_DIR}/larynx-tts/usr/bin/larynx-tts
+COPY debian/larynx-tts ${BUILD_DIR}/larynx-tts/usr/bin/
+RUN chmod +x ${BUILD_DIR}/larynx-tts/usr/bin/larynx-tts
 
 RUN cd ${BUILD_DIR} && \
     dpkg --build larynx-tts
@@ -96,6 +88,10 @@ RUN cd ${BUILD_DIR} && \
 
 # -----------------------------------------------------------------------------
 
+# IFDEF NOBUILDX
 FROM debian:buster-slim
+# ELSE
+FROM scratch
+# ENDIF
 
 COPY --from=build /build/*.deb /

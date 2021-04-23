@@ -1,0 +1,8 @@
+Package: larynx-tts-lang-@LANGUAGE@
+Version: @VERSION@
+Section: utils
+Priority: optional
+Depends: larynx-tts (>= @VERSION@)
+Architecture: all
+Maintainer: Michael Hansen
+Description: Larynx TTS language files for @LANGUAGE_NAME@
