@@ -249,8 +249,8 @@ def _sentence_task(
     _LOGGER.debug(
         "Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)",
         real_time_factor,
-        audio_duration_sec,
         infer_sec,
+        audio_duration_sec,
     )
 
     return audio
