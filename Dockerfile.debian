@@ -77,8 +77,8 @@ RUN export DEBIAN_ARCH="$(dpkg-architecture | grep DEB_BUILD_ARCH= | sed -e 's/[
     mkdir -p ${BUILD_DIR}/larynx-tts/DEBIAN && \
     sed -e s"/@VERSION@/${VERSION}/" -e "s/@DEBIAN_ARCH@/${DEBIAN_ARCH}/" < /control.in > ${BUILD_DIR}/larynx-tts/DEBIAN/control
 
-COPY debian/larynx-tts ${BUILD_DIR}/larynx-tts/usr/bin/
-RUN chmod +x ${BUILD_DIR}/larynx-tts/usr/bin/larynx-tts
+COPY debian/larynx-tts debian/larynx-tts-server ${BUILD_DIR}/larynx-tts/usr/bin/
+RUN chmod +x ${BUILD_DIR}/larynx-tts/usr/bin/*
 
 RUN cd ${BUILD_DIR} && \
     dpkg --build larynx-tts

@@ -1,0 +1,8 @@
+#!/bin/bash
+APPDIR='/usr/lib/larynx-tts'
+
+export PATH="${APPDIR}/bin:${APPDIR}/usr/local/bin:${PATH}"
+export LD_LIBRARY_PATH="${APPDIR}/lib:${APPDIR}/usr/local/lib:${LD_LIBRARY_PATH}"
+export PYTHONPATH="${APPDIR}:${PYTHON_PATH}"
+
+python3 -m larynx.server "$@"
