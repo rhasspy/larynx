@@ -118,6 +118,14 @@ $ python3 -m larynx.server --voices-dir /path/to/voices
 
 Visit http://localhost:5002 to view the site and try out voices. See http://localhost/5002/openapi for documentation on the available HTTP endpoints.
 
+The following default settings can be applied (for when they're not provided in an API call):
+
+* `--quality` - vocoder quality (high/medium/low, default: high)
+* `--noise-scale` - voice volatility (0-1, default: 0.333)
+* `--length-scale` - voice speed (<1 is faster, default: 1.0)
+
+You may also set `--voices-dir` to change where your voices/vocoders are stored. The directory structure should be `<language>/<voice>`.
+
 See `--help` for more options.
 
 ### MaryTTS Compatible API

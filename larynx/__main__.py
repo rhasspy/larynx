@@ -380,9 +380,7 @@ def get_args():
         action="store_true",
         help="Allow [[ phonemes ]] embedded in text",
     )
-    parser.add_argument(
-        "--version", action="store_true", help="Print version and exit"
-    )
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
     parser.add_argument(
         "--debug", action="store_true", help="Print DEBUG messages to the console"
     )
@@ -398,6 +396,7 @@ def get_args():
     if args.version:
         # Print version and exit
         from . import __version__
+
         print(__version__)
         sys.exit(0)
 
@@ -432,7 +431,7 @@ def get_args():
 
         # Print voices
         for lang_dir in args.voices_dir.iterdir():
-            if not vocoder_dir.is_dir():
+            if not lang_dir.is_dir():
                 continue
 
             if lang_dir.name not in vocoder_model_types:

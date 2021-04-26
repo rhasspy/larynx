@@ -70,6 +70,30 @@ parser.add_argument(
     help="Enable/disable Onnx optimizations (auto=disable on armv7l)",
 )
 parser.add_argument(
+    "--quality",
+    choices=["high", "medium", "low"],
+    default="high",
+    help="Vocoder quality used if not set in API call (default: high)",
+)
+parser.add_argument(
+    "--denoiser-strength",
+    type=float,
+    default=0.001,
+    help="Denoiser strength used if not set in API call (default: 0.001)",
+)
+parser.add_argument(
+    "--noise-scale",
+    type=float,
+    default=0.333,
+    help="Noise scale (voice volatility) used if not set in API call (default: 0.333)",
+)
+parser.add_argument(
+    "--length-scale",
+    type=float,
+    default=1.0,
+    help="Length scale (<1 is faster) used if not set in API call (default: 1.0)",
+)
+parser.add_argument(
     "--debug", action="store_true", help="Print DEBUG messages to console"
 )
 args = parser.parse_args()
@@ -111,7 +135,13 @@ app = quart_cors.cors(app)
 # -----------------------------------------------------------------------------
 
 _DEFAULT_AUDIO_SETTINGS = AudioSettings()
-_DEFAULT_VOCODER = "hifi_gan/universal_large"
+
+# Set default vocoder based on quality
+_DEFAULT_VOCODER = {
+    "high": "hifi_gan/universal_large",
+    "medium": "hifi_gan/vctk_medium",
+    "low": "hifi_gan/vctk_small",
+}[args.quality]
 
 # Caches
 _TTS_MODELS: typing.Dict[str, TextToSpeechModel] = {}
@@ -129,8 +159,37 @@ async def text_to_wav(
     length_scale: typing.Optional[float] = None,
 ) -> bytes:
     """Runs TTS for each line and accumulates all audio into a single WAV."""
-    # <LANGUAGE>/<VOICE_NAME>-<TTS_SYSTEM>
-    language, voice_str = voice.split("/", maxsplit=1)
+    language: typing.Optional[str] = None
+
+    if "/" in voice:
+        # <LANGUAGE>/<VOICE_NAME>-<TTS_SYSTEM>
+        language, voice_str = voice.split("/", maxsplit=1)
+    else:
+        # Search for voice
+        found_voice = False
+
+        # <VOICES_DIR>/<LANGUAGE>/<VOICE>
+        for lang_dir in _VOICES_DIR.iterdir():
+            if not lang_dir.is_dir():
+                continue
+
+            for voice_dir in lang_dir.iterdir():
+                if not voice_dir.is_dir():
+                    continue
+
+                if voice_dir.name == voice:
+                    language = lang_dir.name
+                    voice_str = voice_dir.name
+                    found_voice = True
+                    break
+
+            if found_voice:
+                break
+
+    assert (
+        language
+    ), f"No language set for voice: {voice} (is it installed in {_VOICES_DIR}?)"
+
     _voice_name, tts_system = voice_str.split("-", maxsplit=1)
 
     tts_model = _TTS_MODELS.get(voice)
@@ -310,11 +369,11 @@ async def app_say() -> Response:
     assert voice, "No voice provided"
 
     # TTS settings
-    noise_scale = request.args.get("noiseScale")
+    noise_scale = request.args.get("noiseScale", args.noise_scale)
     if noise_scale is not None:
         noise_scale = float(noise_scale)
 
-    length_scale = request.args.get("lengthScale")
+    length_scale = request.args.get("lengthScale", args.length_scale)
     if length_scale is not None:
         length_scale = float(length_scale)
 
@@ -329,7 +388,7 @@ async def app_say() -> Response:
     vocoder = request.args.get("vocoder", _DEFAULT_VOCODER)
 
     # Vocoder settings
-    denoiser_strength = request.args.get("denoiserStrength")
+    denoiser_strength = request.args.get("denoiserStrength", args.denoiser_strength)
     if denoiser_strength is not None:
         denoiser_strength = float(denoiser_strength)
 
@@ -411,10 +470,21 @@ async def api_process():
         voice = request.args.get("VOICE", "")
 
     # <VOICE>;<VOCODER>
-    voice, vocoder = voice.split(";", maxsplit=1)
+    vocoder: typing.Optional[str] = None
+
+    if ";" in voice:
+        voice, vocoder = voice.split(";", maxsplit=1)
+
     vocoder = vocoder or _DEFAULT_VOCODER
 
-    wav_bytes = await text_to_wav(text, voice, vocoder=vocoder)
+    wav_bytes = await text_to_wav(
+        text,
+        voice,
+        vocoder=vocoder,
+        denoiser_strength=args.denoiser_strength,
+        noise_scale=args.noise_scale,
+        length_scale=args.length_scale,
+    )
 
     return Response(wav_bytes, mimetype="audio/wav")
 
