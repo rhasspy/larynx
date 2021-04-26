@@ -11,8 +11,8 @@ $ docker run -it -p 5002:5002 rhasspy/larynx:en-us
 Larynx's goals are:
 
 * "Good enough" synthesis to avoid using a cloud service
-* Faster than realtime performance on a Raspberry Pi 4
-* Broad language support
+* Faster than realtime performance on a Raspberry Pi 4 (with low quality vocoder)
+* Broad language support (8 languages)
 * Voices trained purely from public datasets
 
 ## Samples
@@ -104,7 +104,7 @@ $ python3 -m gruut <LANGUAGE> download
 
 ### Voice/Vocoder Download
 
-Voices and vocoders are available to download from the [release page](https://github.com/rhasspy/larynx/releases). They can be extracted anywhere, and the directory simply needs to be referenced in the command-line (e,g, `--glow-tts /path/to/voice`).
+Voices and vocoders are available to download from the [release page](https://github.com/rhasspy/larynx/releases). They can be extracted anywhere, and the directory simply needs to be referenced in the command-line (e,g, `--voices-dir /path/to/voices`).
 
 ---
 
@@ -190,8 +190,8 @@ $ larynx --list
 
 ## Text to Speech Models
 
-* [GlowTTS](https://github.com/rhasspy/glow-tts-train) (35 voices)
-    * English (`en-us`, 20 voices)
+* [GlowTTS](https://github.com/rhasspy/glow-tts-train) (40 voices)
+    * English (`en-us`, 21 voices)
         * blizzard_fls (F, accent, [Blizzard](https://www.cstr.ed.ac.uk/projects/blizzard/2017/usborne_blizzard2017/license.html))
         * cmu_aew (M, [Arctic](licenses/cmuarctic.txt))
         * cmu_ahw (M, [Arctic](licenses/cmuarctic.txt))
@@ -212,11 +212,13 @@ $ larynx --list
         * harvard (F, accent, [CC/Attr/NC](https://creativecommons.org/licenses/by-nc/4.0/legalcode))
         * kathleen (F, [CC0](licenses/cc0.txt))
         * ljspeech (F, [Public Domain](https://librivox.org/pages/public-domain/))
-    * German (`de-de`, 1 voice)
+        * mary_ann (F, [M-AILabs](licenses/m-ailabs.txt))
+    * German (`de-de`, 5 voice)
         * thorsten (M, [CC0](licenses/cc0.txt))
         * eva_k (F, [M-AILabs](licenses/m-ailabs.txt))
         * karlsson (M, [M-AILabs](licenses/m-ailabs.txt))
         * rebecca\_braunert\_plunkett (F, [M-AILabs](licenses/m-ailabs.txt))
+        * pavoque (M, [CC4/BY/NC/SA](https://github.com/marytts/pavoque-data))
     * French (`fr-fr`, 3 voices)
         * gilles\_le\_blanc (M, [M-AILabs](licenses/m-ailabs.txt))
         * siwis (F, [CC/Attr](licenses/cc4a.txt))
@@ -244,7 +246,7 @@ $ larynx --list
 
 * [Hi-Fi GAN](https://github.com/rhasspy/hifi-gan-train)
     * Universal large
-    * VCTK medium
-    * VCTK small
+    * VCTK "medium"
+    * VCTK "small"
 * [WaveGlow](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/SpeechSynthesis/Tacotron2)
     * 256 channel trained on LJ Speech
