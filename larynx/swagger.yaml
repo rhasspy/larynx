@@ -16,7 +16,7 @@ paths:
         - in: query
           name: voice
           required: true
-          description: 'Voice in the form <language>/<name>-<tts_system>'
+          description: 'Voice in the form [language]/[name]-[tts_system]'
           schema:
             type: string
             example: 'en-us/harvard-glow_tts'
@@ -29,7 +29,7 @@ paths:
             example: 'Welcome to the world of speech synthesis!'
         - in: query
           name: vocoder
-          description: 'Vocoder in the form <vocoder_system>/<model_name>'
+          description: 'Vocoder in the form [vocoder_system]/[model_name]'
           schema:
             type: string
             example: 'hifi_gan/universal_large'
@@ -47,10 +47,71 @@ paths:
             example: 0.333
         - in: query
           name: lengthScale
-          description: 'Speed of speaker (default: 1.0, faster < 1 < slower, GlowTTS only)'
+          description: 'Speed of speaker (default: 1.0, faster &lt; 1 &lt; slower, GlowTTS only)'
           schema:
             type: number
             example: 0.85
+        - in: query
+          name: inlinePhonemes
+          description: 'If true, [[ phonemes ]] in brackets are spoken literally'
+          schema:
+            type: boolean
+            example: false
+      produces:
+        - audio/wav
+      responses:
+        '200':
+          description: audio
+          schema:
+            type: binary
+    post:
+      summary: 'Speak text to WAV'
+      requestBody:
+        required: true
+        description: 'Text to speak'
+        content:
+          text/plain:
+            schema:
+              type: string
+              example: 'Welcome to the world of speech synthesis!'
+      parameters:
+        - in: query
+          name: voice
+          required: true
+          description: 'Voice in the form [language]/[name]-[tts_system]'
+          schema:
+            type: string
+            example: 'en-us/harvard-glow_tts'
+        - in: query
+          name: vocoder
+          description: 'Vocoder in the form [vocoder_system]/[model_name]'
+          schema:
+            type: string
+            example: 'hifi_gan/universal_large'
+        - in: query
+          name: denoiserStrength
+          description: 'Strength of vocoder denoiser (0-1, 0 is disabled)'
+          schema:
+            type: number
+            example: 0.005
+        - in: query
+          name: noiseScale
+          description: 'Volatility of speaker (0-1, default: 0.333, GlowTTS only)'
+          schema:
+            type: number
+            example: 0.333
+        - in: query
+          name: lengthScale
+          description: 'Speed of speaker (default: 1.0, faster &lt; 1 &lt; slower, GlowTTS only)'
+          schema:
+            type: number
+            example: 0.85
+        - in: query
+          name: inlinePhonemes
+          description: 'If true, [[ phonemes ]] in brackets are spoken literally'
+          schema:
+            type: boolean
+            example: false
       produces:
         - audio/wav
       responses:
@@ -85,6 +146,53 @@ paths:
         - in: query
           name: language
           required: true
+          description: 'Gruut language code'
+          schema:
+            type: string
+            example: 'en-us'
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: phonemes
+          schema:
+            type: object
+  /api/word-phonemes:
+    get:
+      summary: 'Get phonemes for word'
+      parameters:
+        - in: query
+          name: word
+          description: 'Word to get phonemes for'
+          schema:
+            type: string
+            example: 'raxacoricofallipatorius'
+        - in: query
+          name: language
+          description: 'Gruut language code'
+          schema:
+            type: string
+            example: 'en-us'
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: phonemes
+          schema:
+            type: object
+    post:
+      summary: 'Get phonemes for word'
+      requestBody:
+        required: true
+        description: 'Word to get phonemes for'
+        content:
+          text/plain:
+            schema:
+              type: string
+              example: 'raxacoricofallipatorius'
+      parameters:
+        - in: query
+          name: language
           description: 'Gruut language code'
           schema:
             type: string

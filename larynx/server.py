@@ -157,6 +157,7 @@ async def text_to_wav(
     denoiser_strength: typing.Optional[float] = None,
     noise_scale: typing.Optional[float] = None,
     length_scale: typing.Optional[float] = None,
+    inline_phonemes: bool = False,
 ) -> bytes:
     """Runs TTS for each line and accumulates all audio into a single WAV."""
     language: typing.Optional[str] = None
@@ -265,6 +266,7 @@ async def text_to_wav(
             audio_settings=audio_settings,
             tts_settings=tts_settings,
             vocoder_settings=vocoder_settings,
+            inline_phonemes=inline_phonemes,
         ),
     )
 
@@ -368,6 +370,12 @@ async def app_say() -> Response:
     voice = request.args.get("voice", "")
     assert voice, "No voice provided"
 
+    # If true, [[ phonemes ]] in brackets are spoken literally
+    inline_phonemes = request.args.get("inlinePhonemes", "").strip().lower() in {
+        "true",
+        "1",
+    }
+
     # TTS settings
     noise_scale = request.args.get("noiseScale", args.noise_scale)
     if noise_scale is not None:
@@ -399,6 +407,7 @@ async def app_say() -> Response:
         denoiser_strength=denoiser_strength,
         noise_scale=noise_scale,
         length_scale=length_scale,
+        inline_phonemes=inline_phonemes,
     )
 
     return Response(wav_bytes, mimetype="audio/wav")
@@ -443,6 +452,8 @@ async def api_phonemes():
         if wav_path and wav_path.is_file():
             # Augment with relative URL to WAV file
             phoneme_dict["url"] = f"wav/{wav_path.name}"
+        else:
+            _LOGGER.debug("No WAV for %s (%s)", phoneme.text, wav_path)
 
         phonemes[phoneme.text] = phoneme_dict
 
@@ -453,6 +464,23 @@ async def api_phonemes():
     #   }
     # }
     return jsonify(phonemes)
+
+
+@app.route("/api/word-phonemes", methods=["GET", "POST"])
+async def api_word_phonemes():
+    """Get phonemes for a word"""
+    if request.method == "POST":
+        word = (await request.data).decode()
+    else:
+        word = request.args.get("word", "")
+
+    assert word, "No word given"
+
+    language = request.args.get("language", "en-us")
+    gruut_lang = get_lang(language)
+    pron = gruut_lang.phonemizer.phonemize([word])[0][0]
+
+    return jsonify(pron.phonemes)
 
 
 # -----------------------------------------------------------------------------
