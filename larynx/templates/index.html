@@ -127,7 +127,7 @@
              var startTime = performance.now()
 
              res = await fetch(
-                 '/api/tts?text=' + encodeURIComponent(text) +
+                 'api/tts?text=' + encodeURIComponent(text) +
                  '&voice=' + encodeURIComponent(voice) +
                  '&vocoder=' + encodeURIComponent(vocoder) +
                  '&denoiserStrength=' + encodeURIComponent(denoiserStrength) +
@@ -157,7 +157,7 @@
                  voiceList.options[i].remove()
              }
 
-             fetch('/api/voices')
+             fetch('api/voices')
                  .then(function(res) {
                      if (!res.ok) throw Error(res.statusText)
                      return res.json()
@@ -177,7 +177,7 @@
          function loadPhonemes() {
              var language = 'en-us'
 
-             fetch('/api/phonemes?language=' + encodeURIComponent(language))
+             fetch('api/phonemes?language=' + encodeURIComponent(language))
                  .then(function(res) {
                      if (!res.ok) throw Error(res.statusText)
                      return res.json()
