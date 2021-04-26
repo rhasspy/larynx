@@ -213,7 +213,7 @@ $ larynx --list
         * kathleen (F, [CC0](licenses/cc0.txt))
         * ljspeech (F, [Public Domain](https://librivox.org/pages/public-domain/))
         * mary_ann (F, [M-AILabs](licenses/m-ailabs.txt))
-    * German (`de-de`, 5 voice)
+    * German (`de-de`, 5 voices)
         * thorsten (M, [CC0](licenses/cc0.txt))
         * eva_k (F, [M-AILabs](licenses/m-ailabs.txt))
         * karlsson (M, [M-AILabs](licenses/m-ailabs.txt))
