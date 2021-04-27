@@ -75,6 +75,7 @@
                     <input type="text" id="phonemes-word" placeholder="word">
                     <button class="btn btn-secondary ml-2" id="get-phonemes" title="Get phonetic pronunciation for word">Get Phonemes</button>
                     <span id="word-phonemes" class="ml-3"></span>
+                    <select id="word-phonemes-index" class="ml-2" hidden></select>
                 </div>
                 <div class="col-auto">
                     <input type="checkbox" id="inline-phonemes" checked>
@@ -178,6 +179,7 @@
 
          q('#phonemes-word').addEventListener('keyup', function(e) {
              if (e.keyCode == 13) {
+                 // Click "Get Phonemes" button on enter
                  q('#get-phonemes').click()
              }
          })
@@ -185,6 +187,13 @@
          q('#get-phonemes').addEventListener('click', async function() {
              q('#word-phonemes').textContent = ''
 
+             var wordPhonemesIndex = q('#word-phonemes-index')
+             wordPhonemesIndex.hidden = true
+             for (var i = wordPhonemesIndex.options.length - 1; i >= 0; i--) {
+                 wordPhonemesIndex.options[i].remove()
+             }
+
+             // Get phonetic pronunciations for a word
              var language = get_language()
              var word = q('#phonemes-word').value
 
@@ -195,7 +204,19 @@
              if (res.ok) {
                  phonemes = await res.json()
 
-                 q('#word-phonemes').textContent = '[[ ' + phonemes.join(' ') + ' ]]'
+                 for (var i = 0; i < phonemes.length; i++) {
+                     var phonemesStr = '[[ ' + phonemes[i].join(' ') + ' ]]'
+                     wordPhonemesIndex.insertAdjacentHTML(
+                         'beforeend', '<option value="' + phonemesStr + '">' + (i+1).toString() + '</option>'
+                     )
+
+                     if (i == 0) {
+                         q('#word-phonemes').textContent = phonemesStr
+                     }
+                 }
+
+                 wordPhonemesIndex.selectedIndex = 0
+                 wordPhonemesIndex.hidden = false
              } else {
                  message = await res.text()
                  q('#message').textContent = message
@@ -205,6 +226,12 @@
 
          q('#voice-list').addEventListener('change', function() {
              loadPhonemes()
+         })
+
+         q('#word-phonemes-index').addEventListener('change', function() {
+             var wordPhonemesIndex = q('#word-phonemes-index')
+             var phonemes = wordPhonemesIndex.options[wordPhonemesIndex.selectedIndex].value
+             q('#word-phonemes').textContent = phonemes
          })
 
          function loadVoices() {

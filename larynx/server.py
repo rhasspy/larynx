@@ -478,9 +478,29 @@ async def api_word_phonemes():
 
     language = request.args.get("language", "en-us")
     gruut_lang = get_lang(language)
-    pron = gruut_lang.phonemizer.phonemize([word])[0][0]
 
-    return jsonify(pron.phonemes)
+    pron_phonemes: typing.List[typing.List[str]] = []
+
+    _LOGGER.debug("Looking up in %s lexicon: %s", language, word)
+    prons = gruut_lang.phonemizer.lookup_word(word)
+    if prons:
+        # Use lexicon
+        pron_phonemes = [p.phonemes for p in prons]
+        _LOGGER.debug(
+            "Found %s pronunciation(s) in lexicon for %s", len(pron_phonemes), word
+        )
+    else:
+        # Guess pronunciations
+        num_guesses = int(request.args.get("numGuesses", "5"))
+        pron_phonemes = [
+            phonemes
+            for _word, phonemes in gruut_lang.phonemizer.predict(
+                [word], nbest=num_guesses
+            )
+        ]
+        _LOGGER.debug("Guessed %s pronunciation(s) for %s", len(pron_phonemes), word)
+
+    return jsonify(pron_phonemes)
 
 
 # -----------------------------------------------------------------------------
