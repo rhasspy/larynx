@@ -77,41 +77,41 @@ def main():
     if args.csv:
         args.output_naming = "id"
 
-    # Load language
-    gruut_data_dirs = [_DIR.parent / "gruut"] + gruut.Language.get_data_dirs()
-    gruut_lang = gruut.Language.load(args.language, data_dirs=gruut_data_dirs)
-    assert gruut_lang, f"Unsupported language: {args.language}"
+    # # Load language
+    # gruut_data_dirs = [_DIR.parent / "gruut"] + gruut.Language.get_data_dirs()
+    # gruut_lang = gruut.Language.load(args.language, data_dirs=gruut_data_dirs)
+    # assert gruut_lang, f"Unsupported language: {args.language}"
 
-    # Verify accent make is available
-    native_lang: typing.Optional[gruut.Language] = None
-    if args.native_language:
-        assert (
-            args.native_language in gruut_lang.accents
-        ), "No accent map for f{args.native_language}"
+    # # Verify accent make is available
+    # native_lang: typing.Optional[gruut.Language] = None
+    # if args.native_language:
+    #     assert (
+    #         args.native_language in gruut_lang.accents
+    #     ), "No accent map for f{args.native_language}"
 
-        native_lang = gruut.Language.load(args.native_language)
-        assert native_lang, f"Unsupported language: {args.native_language}"
+    #     native_lang = gruut.Language.load(args.native_language)
+    #     assert native_lang, f"Unsupported language: {args.native_language}"
 
-    # Add new words to lexicon
-    if args.new_word:
-        _LOGGER.debug("Adding %s new word(s) to lexicon", len(args.new_word))
-        lexicon = gruut_lang.phonemizer.lexicon
-        for word, ipa in args.new_word:
-            ipa = ipa.translate(_IPA_TRANSLATE)
-            word_pron = [
-                p.text
-                for p in gruut_lang.phonemes.split(
-                    ipa, keep_stress=gruut_lang.keep_stress
-                )
-            ]
-            _LOGGER.debug("%s %s", word, " ".join(word_pron))
-            word_prons = lexicon.get(word)
-            if word_prons:
-                # Insert before other pronunciations
-                word_prons.insert(0, word_pron)
-            else:
-                # This is the only pronunication
-                lexicon[word] = [word_pron]
+    # # Add new words to lexicon
+    # if args.new_word:
+    #     _LOGGER.debug("Adding %s new word(s) to lexicon", len(args.new_word))
+    #     lexicon = gruut_lang.phonemizer.lexicon
+    #     for word, ipa in args.new_word:
+    #         ipa = ipa.translate(_IPA_TRANSLATE)
+    #         word_pron = [
+    #             p.text
+    #             for p in gruut_lang.phonemes.split(
+    #                 ipa, keep_stress=gruut_lang.keep_stress
+    #             )
+    #         ]
+    #         _LOGGER.debug("%s %s", word, " ".join(word_pron))
+    #         word_prons = lexicon.get(word)
+    #         if word_prons:
+    #             # Insert before other pronunciations
+    #             word_prons.insert(0, word_pron)
+    #         else:
+    #             # This is the only pronunication
+    #             lexicon[word] = [word_pron]
 
     # Load TTS
     _LOGGER.debug(
@@ -168,7 +168,7 @@ def main():
 
         text_and_audios = text_to_speech(
             text=line,
-            gruut_lang=gruut_lang,
+            lang=args.language,
             tts_model=tts_model,
             vocoder_model=vocoder_model,
             audio_settings=audio_settings,
@@ -176,7 +176,7 @@ def main():
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
             tts_settings=tts_settings,
-            native_lang=native_lang,
+            # native_lang=native_lang,
             max_workers=(
                 None if args.max_thread_workers <= 0 else args.max_thread_workers
             ),
@@ -244,6 +244,27 @@ def main():
 
         sys.stdout.buffer.write(wav_data)
 
+
+# -----------------------------------------------------------------------------
+
+# Default voices for each language
+LANG_VOICES = {
+    "de": "thorsten-glow_tts",
+    "de-de": "thorsten-glow_tts",
+    "en": "mary_ann-glow_tts",
+    "en-us": "mary_ann-glow_tts",
+    "es": "carlfm-glow_tts",
+    "es-es": "carlfm-glow_tts",
+    "fr": "siwis-glow_tts",
+    "fr-fr": "siwis-glow_tts",
+    "it": "lisa-glow_tts",
+    "it-it": "lisa-glow_tts",
+    "nl": "rdh-glow_tts",
+    "ru": "nikolaev-glow_tts",
+    "ru-ru": "nikolaev-glow_tts",
+    "sv": "talesyntese-glow_tts",
+    "sv-se": "talesyntese-glow_tts",
+}
 
 # -----------------------------------------------------------------------------
 
@@ -353,7 +374,7 @@ def get_args():
     parser.add_argument(
         "--denoiser-strength",
         type=float,
-        default=0.0,
+        default=0.001,
         help="Strength of denoiser, if available (default: 0 = disabled)",
     )
 
@@ -416,12 +437,12 @@ def get_args():
         )
 
         # Print vocoders
-        for vocoder_dir in args.voices_dir.iterdir():
+        for vocoder_dir in sorted(args.voices_dir.iterdir()):
             if not vocoder_dir.is_dir():
                 continue
 
-            if vocoder_dir.name in vocoder_model_types:
-                for model_dir in vocoder_dir.iterdir():
+            if vocoder_dir.name in sorted(vocoder_model_types):
+                for model_dir in sorted(vocoder_dir.iterdir()):
                     if not model_dir.is_dir():
                         continue
 
@@ -430,7 +451,7 @@ def get_args():
                     )
 
         # Print voices
-        for lang_dir in args.voices_dir.iterdir():
+        for lang_dir in sorted(args.voices_dir.iterdir()):
             if not lang_dir.is_dir():
                 continue
 
@@ -454,6 +475,7 @@ def get_args():
     setattr(args, "vocoder_model", None)
 
     if args.voice:
+        args.voice = LANG_VOICES.get(args.voice, args.voice)
         tts_model_dir: typing.Optional[Path] = None
 
         if args.language:
