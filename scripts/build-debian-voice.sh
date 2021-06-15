@@ -2,13 +2,15 @@
 set -e
 
 if [[ -z "$1" ]]; then
-    echo "Usage: build-debian-voice dist/"
+    echo "Usage: build-debian-voice dist/ [LANG] [LANG]"
     exit 1
 fi
 
 dist_dir="$(realpath "$1")"
 mkdir -p "${dist_dir}"
 shift
+
+only_langs=("$@")
 
 # Directory of *this* script
 this_dir="$( cd "$( dirname "$0" )" && pwd )"
@@ -24,6 +26,7 @@ function cleanup {
 trap cleanup EXIT
 
 # -----------------------------------------------------------------------------
+
 
 declare -A lang_names
 lang_names['de-de']='German'
@@ -48,6 +51,22 @@ find "${src_dir}/local" -mindepth 1 -maxdepth 1 -type d | \
         if [[ -z "${lang_name}" ]]; then
             echo "No language name for ${lang}";
             exit 1;
+        fi
+
+        if [[ -n "${only_langs[@]}" ]]; then
+            skip_lang='yes'
+            for check_lang in "${only_langs[@]}"; do
+                if [[ "${check_lang}" == "${lang}" ]]; then
+                    # Language was found in list
+                    skip_lang=''
+                    break;
+                fi
+            done
+        fi
+
+        if [[ -n "${skip_lang}" ]]; then
+            echo "Skipping ${lang}";
+            continue;
         fi
 
         find "${lang_dir}" -mindepth 1 -maxdepth 1 -type d | \

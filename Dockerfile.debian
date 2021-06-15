@@ -7,11 +7,8 @@ FROM debian:buster-slim as python37
 ENV LANG C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 
-# IFDEF APT_PROXY
-#! RUN echo 'Acquire::http { Proxy "http://${APT_PROXY_HOST}:${APT_PROXY_PORT}"; };' >> /etc/apt/apt.conf.d/01proxy
-# ENDIF
-
-RUN apt-get update && \
+RUN --mount=type=cache,id=apt-python,target=/var/apt/cache \
+    apt-get update && \
     apt-get install --yes --no-install-recommends \
         build-essential \
         git zlib1g-dev patchelf rsync \
@@ -31,13 +28,10 @@ RUN cd /build/Python-3.7.10 && \
 
 FROM debian:buster-slim as build
 
-# IFDEF APT_PROXY
-#! RUN echo 'Acquire::http { Proxy "http://${APT_PROXY_HOST}:${APT_PROXY_PORT}"; };' >> /etc/apt/apt.conf.d/01proxy
-# ENDIF
-
-RUN apt-get update && \
+RUN --mount=type=cache,id=apt-build,target=/var/apt/cache \
+    apt-get update && \
     apt-get install --yes --no-install-recommends \
-        build-essential libssl1.1 dpkg-dev
+        build-essential libssl1.1 dpkg-dev python3
 
 ENV APP_DIR=/usr/lib/larynx-tts
 
@@ -45,18 +39,15 @@ COPY --from=python37 ${APP_DIR}/ ${APP_DIR}/
 COPY --from=python37 ${APP_DIR}/usr/local/include/python3.7m/ /usr/include/
 ENV PYTHON=${APP_DIR}/usr/local/bin/python3
 
-# IFDEF PYPI_PROXY
-#! ENV PIP_INDEX_URL=http://${PYPI_PROXY_HOST}:${PYPI_PROXY_PORT}/simple/
-#! ENV PIP_TRUSTED_HOST=${PYPI_PROXY_HOST}
-# ENDIF
-
-RUN ${PYTHON} -m pip install --upgrade 'pip<=20.2.4' && \
+RUN --mount=type=cache,id=pip-build,target=/root/.cache/pip \
+    ${PYTHON} -m pip install --upgrade 'pip<=20.2.4' && \
     ${PYTHON} -m pip install --upgrade wheel setuptools
 
 # Install Python packages
 COPY download/ /download/
 COPY requirements.txt ${APP_DIR}/larynx/
-RUN cd ${APP_DIR}/larynx && \
+RUN --mount=type=cache,id=pip-build,target=/root/.cache/pip \
+    cd ${APP_DIR}/larynx && \
     ${PYTHON} -m pip install -f /download -r requirements.txt
 
 # Create Debian package
