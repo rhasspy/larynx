@@ -15,16 +15,18 @@ from pathlib import Path
 
 import numpy as np
 
-import gruut
-
 from . import load_tts_model, load_vocoder_model, text_to_speech
 from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
-from .utils import _IPA_TRANSLATE
+from .utils import download_voice
 from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
 _DEFAULT_VOICES_DIR = _DIR.parent / "local"
+_ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
+_DEFAULT_URL_FORMAT = (
+    "http://github.com/rhasspy/larynx/releases/download/2021-03-28/{voice}.tar.gz"
+)
 
 _LOGGER = logging.getLogger("larynx")
 
@@ -77,42 +79,6 @@ def main():
     if args.csv:
         args.output_naming = "id"
 
-    # # Load language
-    # gruut_data_dirs = [_DIR.parent / "gruut"] + gruut.Language.get_data_dirs()
-    # gruut_lang = gruut.Language.load(args.language, data_dirs=gruut_data_dirs)
-    # assert gruut_lang, f"Unsupported language: {args.language}"
-
-    # # Verify accent make is available
-    # native_lang: typing.Optional[gruut.Language] = None
-    # if args.native_language:
-    #     assert (
-    #         args.native_language in gruut_lang.accents
-    #     ), "No accent map for f{args.native_language}"
-
-    #     native_lang = gruut.Language.load(args.native_language)
-    #     assert native_lang, f"Unsupported language: {args.native_language}"
-
-    # # Add new words to lexicon
-    # if args.new_word:
-    #     _LOGGER.debug("Adding %s new word(s) to lexicon", len(args.new_word))
-    #     lexicon = gruut_lang.phonemizer.lexicon
-    #     for word, ipa in args.new_word:
-    #         ipa = ipa.translate(_IPA_TRANSLATE)
-    #         word_pron = [
-    #             p.text
-    #             for p in gruut_lang.phonemes.split(
-    #                 ipa, keep_stress=gruut_lang.keep_stress
-    #             )
-    #         ]
-    #         _LOGGER.debug("%s %s", word, " ".join(word_pron))
-    #         word_prons = lexicon.get(word)
-    #         if word_prons:
-    #             # Insert before other pronunciations
-    #             word_prons.insert(0, word_pron)
-    #         else:
-    #             # This is the only pronunication
-    #             lexicon[word] = [word_pron]
-
     # Load TTS
     _LOGGER.debug(
         "Loading text to speech model (%s, %s)", args.tts_model_type, args.tts_model
@@ -154,6 +120,10 @@ def main():
         if os.isatty(sys.stdin.fileno()):
             print("Reading text from stdin...", file=sys.stderr)
 
+            if not args.output_dir:
+                # No where else for the audio to go
+                args.interactive = True
+
     all_audios: typing.List[np.ndarray] = []
     wav_data: typing.Optional[bytes] = None
 
@@ -176,11 +146,9 @@ def main():
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
             tts_settings=tts_settings,
-            # native_lang=native_lang,
             max_workers=(
                 None if args.max_thread_workers <= 0 else args.max_thread_workers
             ),
-            inline_phonemes=args.inline_phonemes,
         )
 
         text_id = ""
@@ -197,6 +165,7 @@ def main():
                 if args.interactive:
 
                     # Play audio
+                    _LOGGER.debug("Playing audio with play command")
                     subprocess.run(
                         ["play", "-"],
                         input=wav_data,
@@ -238,6 +207,7 @@ def main():
 
     # Write combined audio to stdout
     if all_audios:
+        _LOGGER.debug("Writing WAV audio to stdout")
         with io.BytesIO() as wav_io:
             wav_write(wav_io, args.sample_rate, np.concatenate(all_audios))
             wav_data = wav_io.getvalue()
@@ -264,6 +234,7 @@ LANG_VOICES = {
     "ru-ru": "nikolaev-glow_tts",
     "sv": "talesyntese-glow_tts",
     "sv-se": "talesyntese-glow_tts",
+    "sw": "biblia_takatifu-glow_tts",
 }
 
 # -----------------------------------------------------------------------------
@@ -279,10 +250,11 @@ def get_args():
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
     )
     parser.add_argument(
-        "--voice", "-v", help="Name of voice (expected in <voice-dir>/<language>)"
+        "--voice", "-v", help="Name of voice (expected in <voices-dir>/<language>)"
     )
     parser.add_argument(
-        "--voices-dir", help="Directory with voices (format is <language>/<name_model>)"
+        "--voices-dir",
+        help="Directory with voices (format is <language>/<name_model-type>)",
     )
     parser.add_argument(
         "--quality",
@@ -333,12 +305,6 @@ def get_args():
         action="store_true",
         help="Allow number_conv form for specifying num2words converter (cardinal, ordinal, ordinal_num, year, currency)",
     )
-    parser.add_argument(
-        "--new-word",
-        nargs=2,
-        action="append",
-        help="Add IPA pronunciation for word (word IPA)",
-    )
 
     # TTS models
     parser.add_argument(
@@ -378,11 +344,6 @@ def get_args():
         help="Strength of denoiser, if available (default: 0 = disabled)",
     )
 
-    # Accent
-    parser.add_argument(
-        "--native-language", help="Native language of speaker (accented speech)"
-    )
-
     # Miscellaneous
     parser.add_argument(
         "--no-autoload-config",
@@ -395,12 +356,19 @@ def get_args():
         default=2,
         help="Maximum number of threads to concurrently run sentences through TTS/Vocoder",
     )
-    parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
+
     parser.add_argument(
-        "--inline-phonemes",
+        "--no-download",
         action="store_true",
-        help="Allow [[ phonemes ]] embedded in text",
+        help="Don't automatically download voices or vocoders",
     )
+    parser.add_argument(
+        "--url-format",
+        default=_DEFAULT_URL_FORMAT,
+        help="Format string for download URLs (accepts {voice})",
+    )
+
+    parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     parser.add_argument(
         "--debug", action="store_true", help="Print DEBUG messages to the console"
@@ -423,12 +391,27 @@ def get_args():
 
     # -------------------------------------------------------------------------
 
+    # Directories to search for voices
+    voices_dirs: typing.List[Path] = []
+
     if args.voices_dir:
-        # Use --voices-dir
-        args.voices_dir = Path(args.voices_dir)
+        # 1. Use --voices-dir
+        voices_dirs.append(Path(args.voices_dir))
+
+    # 2. Use environment variable
+    if _ENV_VOICES_DIR in os.environ:
+        voices_dirs.append(Path(os.environ.get(_ENV_VOICES_DIR)))
+
+    # 3. Use ${XDG_DATA_HOME}/larynx/voices
+    maybe_data_home = os.environ.get("XDG_DATA_HOME")
+    if maybe_data_home:
+        voices_dirs.append(Path(maybe_data_home) / "larynx" / "voices")
     else:
-        # Use environment variable or default directory
-        args.voices_dir = Path(os.environ.get("LARYNX_VOICES_DIR", _DEFAULT_VOICES_DIR))
+        # ~/.local/share/larynx/voices
+        voices_dirs.append(Path.home() / ".local" / "share" / "larynx" / "voices")
+
+    # 4. Use local directory next to module
+    voices_dirs.append(_DIR.parent / "local")
 
     def list_voices_vocoders():
         """Print all vocoders and voices"""
@@ -437,30 +420,40 @@ def get_args():
         )
 
         # Print vocoders
-        for vocoder_dir in sorted(args.voices_dir.iterdir()):
-            if not vocoder_dir.is_dir():
+        for voices_dir in voices_dirs:
+            if not voices_dir.is_dir():
                 continue
 
-            if vocoder_dir.name in sorted(vocoder_model_types):
-                for model_dir in sorted(vocoder_dir.iterdir()):
-                    if not model_dir.is_dir():
-                        continue
+            for vocoder_dir in sorted(voices_dir.iterdir()):
+                if not vocoder_dir.is_dir():
+                    continue
 
-                    print(
-                        "vocoder", vocoder_dir.name, model_dir.name, model_dir, sep="\t"
-                    )
+                if vocoder_dir.name in sorted(vocoder_model_types):
+                    for model_dir in sorted(vocoder_dir.iterdir()):
+                        if not model_dir.is_dir():
+                            continue
 
-        # Print voices
-        for lang_dir in sorted(args.voices_dir.iterdir()):
-            if not lang_dir.is_dir():
-                continue
+                        print(
+                            "vocoder",
+                            vocoder_dir.name,
+                            model_dir.name,
+                            model_dir,
+                            sep="\t",
+                        )
 
-            if lang_dir.name not in vocoder_model_types:
-                for voice_dir in lang_dir.iterdir():
-                    if not voice_dir.is_dir():
-                        continue
+            # Print voices
+            for lang_dir in sorted(voices_dir.iterdir()):
+                if not lang_dir.is_dir():
+                    continue
 
-                    print("voice", lang_dir.name, voice_dir.name, voice_dir, sep="\t")
+                if lang_dir.name not in vocoder_model_types:
+                    for voice_dir in lang_dir.iterdir():
+                        if not voice_dir.is_dir():
+                            continue
+
+                        print(
+                            "voice", lang_dir.name, voice_dir.name, voice_dir, sep="\t"
+                        )
 
     if args.list:
         list_voices_vocoders()
@@ -480,14 +473,36 @@ def get_args():
 
         if args.language:
             # Use directory under language
-            tts_model_dir = args.voices_dir / args.language / args.voice
-            assert tts_model_dir.is_dir(), f"Expected voice at {tts_model_dir}"
+            for voices_dir in voices_dirs:
+                maybe_tts_model_dir = voices_dir / args.language / args.voice
+                if maybe_tts_model_dir.is_dir():
+                    tts_model_dir = maybe_tts_model_dir
+                    break
         else:
             # Search for voice
-            for model_dir in args.voices_dir.rglob(args.voice):
-                if model_dir.is_dir():
-                    tts_model_dir = model_dir
-                    break
+            for voices_dir in voices_dirs:
+                for model_dir in voices_dir.rglob(args.voice):
+                    if model_dir.is_dir():
+                        tts_model_dir = model_dir
+                        break
+
+        if (tts_model_dir is None) and (not args.no_download):
+            url_voice = args.voice
+
+            # Resolve voice name to download file name
+            with open(_DIR / "VOICES", "r") as voices_file:
+                for line in voices_file:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    *voice_aliases, download_name = line.split()
+                    if args.voice in voice_aliases:
+                        url_voice = download_name
+                        break
+
+            url = args.url_format.format(voice=url_voice)
+            tts_model_dir = download_voice(args.voice, voices_dirs[0], url)
 
         assert tts_model_dir is not None, f"Voice not found: {args.voice}"
         _LOGGER.debug("Using voice at %s", tts_model_dir)
@@ -508,10 +523,20 @@ def get_args():
     elif args.quality == "low":
         vocoder_model_name = "vctk_small"
 
-    vocoder_model_dir = args.voices_dir / vocoder_model_type / vocoder_model_name
-    setattr(args, "vocoder_model", str(vocoder_model_dir))
+    vocoder_model_dir: typing.Optional[Path] = None
+    for voices_dir in voices_dirs:
+        maybe_vocoder_model_dir = voices_dir / vocoder_model_type / vocoder_model_name
+        if maybe_vocoder_model_dir.is_dir():
+            vocoder_model_dir = maybe_vocoder_model_dir
+            break
 
-    if vocoder_model_dir.is_dir():
+    if (vocoder_model_dir is None) and (not args.no_download):
+        vocoder_name = f"{vocoder_model_type}_{vocoder_model_name}"
+        url = args.url_format.format(voice=vocoder_name)
+        vocoder_model_dir = download_voice(vocoder_name, voices_dirs[0], url)
+
+    if vocoder_model_dir is not None:
+        setattr(args, "vocoder_model", str(vocoder_model_dir))
         _LOGGER.debug("Using vocoder at %s", vocoder_model_dir)
 
     # Ensure TTS model

@@ -77,10 +77,6 @@
                     <span id="word-phonemes" class="ml-3"></span>
                     <select id="word-phonemes-index" class="ml-2" hidden></select>
                 </div>
-                <div class="col-auto">
-                    <input type="checkbox" id="inline-phonemes" checked>
-                    <label for="inline-phonemes" class="col-form-label" title="Phonemes inside [[ brackets ]] are spoken literally">Enable <tt>[[phonemes]]</tt></label>
-                </div>
             </div>
             <div class="row mt-3">
                 <div class="col">
@@ -148,7 +144,6 @@
              var denoiserStrength = q('#denoiser-strength').value || '0'
              var noiseScale = q('#noise-scale').value || '0.333'
              var lengthScale = q('#length-scale').value || '1.0'
-             var inlinePhonemes = q('#inline-phonemes').checked ? 'true' : 'false'
 
              var startTime = performance.now()
 
@@ -158,8 +153,7 @@
                  '&vocoder=' + encodeURIComponent(vocoder) +
                  '&denoiserStrength=' + encodeURIComponent(denoiserStrength) +
                  '&noiseScale=' + encodeURIComponent(noiseScale) +
-                 '&lengthScale=' + encodeURIComponent(lengthScale) +
-                 '&inlinePhonemes=' + encodeURIComponent(inlinePhonemes),
+                 '&lengthScale=' + encodeURIComponent(lengthScale),
                  {cache: 'no-cache'})
 
              if (res.ok) {

@@ -87,7 +87,7 @@ From there, you may run the `larynx` command or `larynx-server` to start the web
 ## Python Installation
 
 ```sh
-$ pip install larynx
+$ pip install -f 'https://synesthesiam.github.io/prebuilt-apps/' larynx
 ```
 
 For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/download/v1.0/) is available (official 64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).

@@ -51,12 +51,6 @@ paths:
           schema:
             type: number
             example: 0.85
-        - in: query
-          name: inlinePhonemes
-          description: 'If true, [[ phonemes ]] in brackets are spoken literally'
-          schema:
-            type: boolean
-            example: false
       produces:
         - audio/wav
       responses:
@@ -106,12 +100,6 @@ paths:
           schema:
             type: number
             example: 0.85
-        - in: query
-          name: inlinePhonemes
-          description: 'If true, [[ phonemes ]] in brackets are spoken literally'
-          schema:
-            type: boolean
-            example: false
       produces:
         - audio/wav
       responses:

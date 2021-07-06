@@ -15,6 +15,8 @@ from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
 
+import gruut
+import gruut_ipa
 import hypercorn
 import numpy as np
 import quart_cors
@@ -27,8 +29,6 @@ from quart import (
     send_from_directory,
 )
 from swagger_ui import quart_api_doc
-
-import gruut
 
 from . import (
     TextToSpeechModel,
@@ -147,7 +147,7 @@ _DEFAULT_VOCODER = {
 _TTS_MODELS: typing.Dict[str, TextToSpeechModel] = {}
 _AUDIO_SETTINGS: typing.Dict[str, AudioSettings] = {}
 _VOCODER_MODELS: typing.Dict[str, VocoderModel] = {}
-_GRUUT_LANGS: typing.Dict[str, gruut.Language] = {}
+_GRUUT_PHONEMIZER: typing.Dict[str, gruut.SqlitePhonemizer] = {}
 
 
 async def text_to_wav(
@@ -157,7 +157,6 @@ async def text_to_wav(
     denoiser_strength: typing.Optional[float] = None,
     noise_scale: typing.Optional[float] = None,
     length_scale: typing.Optional[float] = None,
-    inline_phonemes: bool = False,
 ) -> bytes:
     """Runs TTS for each line and accumulates all audio into a single WAV."""
     language: typing.Optional[str] = None
@@ -233,9 +232,6 @@ async def text_to_wav(
         )
         _VOCODER_MODELS[vocoder] = vocoder_model
 
-    # Load language
-    gruut_lang = get_lang(language)
-
     # Settings
     tts_settings = None
     if (noise_scale is not None) or (length_scale is not None):
@@ -260,13 +256,12 @@ async def text_to_wav(
         functools.partial(
             text_to_speech,
             text=text,
-            gruut_lang=gruut_lang,
+            lang=language,
             tts_model=tts_model,
             vocoder_model=vocoder_model,
             audio_settings=audio_settings,
             tts_settings=tts_settings,
             vocoder_settings=vocoder_settings,
-            inline_phonemes=inline_phonemes,
         ),
     )
 
@@ -314,19 +309,6 @@ def get_voices() -> typing.Dict[str, typing.Dict[str, str]]:
     return voices
 
 
-def get_lang(language: str) -> gruut.Language:
-    """Load language from cache or disk"""
-    gruut_lang = _GRUUT_LANGS.get(language)
-    if gruut_lang is None:
-        data_dirs = gruut.Language.get_data_dirs() + [_DIR.parent / "gruut"]
-        gruut_lang = gruut.Language.load(language=language, data_dirs=data_dirs)
-
-        assert gruut_lang, f"No support for language {language} in gruut ({data_dirs})"
-        _GRUUT_LANGS[language] = gruut_lang
-
-    return gruut_lang
-
-
 # -----------------------------------------------------------------------------
 # HTTP Endpoints
 # -----------------------------------------------------------------------------
@@ -370,12 +352,6 @@ async def app_say() -> Response:
     voice = request.args.get("voice", "")
     assert voice, "No voice provided"
 
-    # If true, [[ phonemes ]] in brackets are spoken literally
-    inline_phonemes = request.args.get("inlinePhonemes", "").strip().lower() in {
-        "true",
-        "1",
-    }
-
     # TTS settings
     noise_scale = request.args.get("noiseScale", args.noise_scale)
     if noise_scale is not None:
@@ -407,7 +383,6 @@ async def app_say() -> Response:
         denoiser_strength=denoiser_strength,
         noise_scale=noise_scale,
         length_scale=length_scale,
-        inline_phonemes=inline_phonemes,
     )
 
     return Response(wav_bytes, mimetype="audio/wav")
@@ -417,10 +392,12 @@ async def app_say() -> Response:
 async def api_phonemes():
     """Get phonemes for language"""
     language = request.args.get("language", "en-us")
-    gruut_lang = get_lang(language)
 
     phonemes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
-    for phoneme in gruut_lang.phonemes:
+    lang_phonemes = gruut_ipa.Phonemes.from_language(language)
+    assert lang_phonemes, f"Unsupported language: {lang_phonemes}"
+
+    for phoneme in lang_phonemes:
         # Try to guess WAV file name for phoneme
         # Files from https://www.ipachart.com/
         wav_path: typing.Optional[Path] = None
@@ -477,28 +454,16 @@ async def api_word_phonemes():
     assert word, "No word given"
 
     language = request.args.get("language", "en-us")
-    gruut_lang = get_lang(language)
+    phonemizer = _GRUUT_PHONEMIZER.get(language)
+    if phonemizer is None:
+        phonemizer = gruut.get_phonemizer(language)
+        _GRUUT_PHONEMIZER[language] = phonemizer
 
     pron_phonemes: typing.List[typing.List[str]] = []
 
     _LOGGER.debug("Looking up in %s lexicon: %s", language, word)
-    prons = gruut_lang.phonemizer.lookup_word(word)
-    if prons:
-        # Use lexicon
-        pron_phonemes = [p.phonemes for p in prons]
-        _LOGGER.debug(
-            "Found %s pronunciation(s) in lexicon for %s", len(pron_phonemes), word
-        )
-    else:
-        # Guess pronunciations
-        num_guesses = int(request.args.get("numGuesses", "5"))
-        pron_phonemes = [
-            phonemes
-            for _word, phonemes in gruut_lang.phonemizer.predict(
-                [word], nbest=num_guesses
-            )
-        ]
-        _LOGGER.debug("Guessed %s pronunciation(s) for %s", len(pron_phonemes), word)
+    prons = next(phonemizer.phonemize([word]))
+    pron_phonemes = [prons]
 
     return jsonify(pron_phonemes)
 
