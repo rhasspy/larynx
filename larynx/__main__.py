@@ -18,7 +18,7 @@ import numpy as np
 from . import load_tts_model, load_vocoder_model, text_to_speech
 from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
-from .utils import download_voice
+from .utils import download_voice, valid_voice_dir
 from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
@@ -218,7 +218,7 @@ def main():
 # -----------------------------------------------------------------------------
 
 # Default voices for each language
-LANG_VOICES = {
+VOICE_ALIASES = {
     "de": "thorsten-glow_tts",
     "de-de": "thorsten-glow_tts",
     "en": "mary_ann-glow_tts",
@@ -236,6 +236,9 @@ LANG_VOICES = {
     "sv-se": "talesyntese-glow_tts",
     "sw": "biblia_takatifu-glow_tts",
 }
+
+# voice -> <name>.tar.gz
+VOICE_DOWNLOAD_NAMES = {}
 
 # -----------------------------------------------------------------------------
 
@@ -461,6 +464,21 @@ def get_args():
 
     # -------------------------------------------------------------------------
 
+    # Load voice aliases
+    with open(_DIR / "VOICES", "r") as voices_file:
+        for line in voices_file:
+            line = line.strip()
+            if not line:
+                continue
+
+            # alias alias ... full_name download_name
+            *voice_aliases, full_voice_name, download_name = line.split()
+            for voice_alias in voice_aliases:
+                VOICE_ALIASES[voice_alias] = full_voice_name
+                VOICE_DOWNLOAD_NAMES[full_voice_name] = download_name
+
+    # -------------------------------------------------------------------------
+
     # Set defaults
     setattr(args, "tts_model_type", None)
     setattr(args, "tts_model", None)
@@ -468,38 +486,28 @@ def get_args():
     setattr(args, "vocoder_model", None)
 
     if args.voice:
-        args.voice = LANG_VOICES.get(args.voice, args.voice)
+        # Resolve aliases
+        args.voice = VOICE_ALIASES.get(args.voice, args.voice)
         tts_model_dir: typing.Optional[Path] = None
 
         if args.language:
             # Use directory under language
             for voices_dir in voices_dirs:
                 maybe_tts_model_dir = voices_dir / args.language / args.voice
-                if maybe_tts_model_dir.is_dir():
+                if valid_voice_dir(maybe_tts_model_dir):
                     tts_model_dir = maybe_tts_model_dir
                     break
         else:
             # Search for voice
             for voices_dir in voices_dirs:
                 for model_dir in voices_dir.rglob(args.voice):
-                    if model_dir.is_dir():
+                    if valid_voice_dir(model_dir):
                         tts_model_dir = model_dir
                         break
 
         if (tts_model_dir is None) and (not args.no_download):
-            url_voice = args.voice
-
-            # Resolve voice name to download file name
-            with open(_DIR / "VOICES", "r") as voices_file:
-                for line in voices_file:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    *voice_aliases, download_name = line.split()
-                    if args.voice in voice_aliases:
-                        url_voice = download_name
-                        break
+            url_voice = VOICE_DOWNLOAD_NAMES.get(args.voice)
+            assert url_voice is not None, f"No download name for voice {args.voice}"
 
             url = args.url_format.format(voice=url_voice)
             tts_model_dir = download_voice(args.voice, voices_dirs[0], url)
@@ -526,12 +534,13 @@ def get_args():
     vocoder_model_dir: typing.Optional[Path] = None
     for voices_dir in voices_dirs:
         maybe_vocoder_model_dir = voices_dir / vocoder_model_type / vocoder_model_name
-        if maybe_vocoder_model_dir.is_dir():
+        if valid_voice_dir(maybe_vocoder_model_dir):
             vocoder_model_dir = maybe_vocoder_model_dir
             break
 
     if (vocoder_model_dir is None) and (not args.no_download):
-        vocoder_name = f"{vocoder_model_type}_{vocoder_model_name}"
+        # hifi_gan-universal_large
+        vocoder_name = f"{vocoder_model_type}-{vocoder_model_name}"
         url = args.url_format.format(voice=vocoder_name)
         vocoder_model_dir = download_voice(vocoder_name, voices_dirs[0], url)
 
