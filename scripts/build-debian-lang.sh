@@ -10,6 +10,8 @@ dist_dir="$(realpath "$1")"
 mkdir -p "${dist_dir}"
 shift
 
+only_langs=("$@")
+
 # Directory of *this* script
 this_dir="$( cd "$( dirname "$0" )" && pwd )"
 src_dir="$(realpath "${this_dir}/..")"
@@ -46,6 +48,22 @@ find "${src_dir}/gruut" -mindepth 1 -maxdepth 1 -type d | \
         if [[ -z "${lang_name}" ]]; then
             echo "No language name for ${lang}";
             exit 1;
+        fi
+
+        if [[ -n "${only_langs[@]}" ]]; then
+            skip_lang='yes'
+            for check_lang in "${only_langs[@]}"; do
+                if [[ "${check_lang}" == "${lang}" ]]; then
+                    # Language was found in list
+                    skip_lang=''
+                    break;
+                fi
+            done
+        fi
+
+        if [[ -n "${skip_lang}" ]]; then
+            echo "Skipping ${lang}";
+            continue;
         fi
 
         package_dir="${temp_dir}/larynx-tts-lang-${lang}"
