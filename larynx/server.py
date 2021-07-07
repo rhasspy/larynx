@@ -6,7 +6,6 @@ import functools
 import io
 import json
 import logging
-import os
 import platform
 import signal
 import time
@@ -38,10 +37,10 @@ from . import (
     text_to_speech,
 )
 from .audio import AudioSettings
+from .utils import get_voices_dirs, resolve_voice_name, valid_voice_dir
 from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
-_VOICES_DIR = _DIR.parent / "local"
 _WAV_DIR = _DIR / "wav"
 
 # Directory names that contain vocoders instead of voices
@@ -113,14 +112,7 @@ elif args.optimizations == "auto":
         # Enabling optimizations on 32-bit ARM crashes
         args.no_optimizations = True
 
-if args.voices_dir:
-    # Use command-line
-    _VOICES_DIR = Path(args.voices_dir)
-else:
-    # Use environment variable or default
-    _VOICES_DIR = Path(os.environ.get("LARYNX_VOICES_DIR", _VOICES_DIR))
-
-_LOGGER.info("Voices directory: %s", _VOICES_DIR)
+voices_dirs = get_voices_dirs(args.voices_dir)
 
 # -----------------------------------------------------------------------------
 
@@ -160,51 +152,76 @@ async def text_to_wav(
 ) -> bytes:
     """Runs TTS for each line and accumulates all audio into a single WAV."""
     language: typing.Optional[str] = None
+    voice_str = voice
 
     if "/" in voice:
         # <LANGUAGE>/<VOICE_NAME>-<TTS_SYSTEM>
-        language, voice_str = voice.split("/", maxsplit=1)
-    else:
-        # Search for voice
-        found_voice = False
-
-        # <VOICES_DIR>/<LANGUAGE>/<VOICE>
-        for lang_dir in _VOICES_DIR.iterdir():
-            if not lang_dir.is_dir():
-                continue
-
-            for voice_dir in lang_dir.iterdir():
-                if not voice_dir.is_dir():
-                    continue
-
-                if voice_dir.name == voice:
-                    language = lang_dir.name
-                    voice_str = voice_dir.name
-                    found_voice = True
-                    break
-
-            if found_voice:
-                break
-
-    assert (
-        language
-    ), f"No language set for voice: {voice} (is it installed in {_VOICES_DIR}?)"
-
-    _voice_name, tts_system = voice_str.split("-", maxsplit=1)
+        language, voice_str = voice_str.split("/", maxsplit=1)
 
     tts_model = _TTS_MODELS.get(voice)
     if tts_model is None:
+        tts_model_dir: typing.Optional[Path] = None
+
+        if language is not None:
+            # Search by exact language/name
+            # <VOICES_DIR>/<LANGUAGE>/<VOICE>
+            for voices_dir in voices_dirs:
+                maybe_tts_model_dir = voices_dir / language / voice_str
+                if valid_voice_dir(maybe_tts_model_dir):
+                    tts_model_dir = maybe_tts_model_dir
+                    break
+
+        if tts_model_dir is None:
+            # Search for voice in all directories
+            voice_str = resolve_voice_name(voice_str)
+
+            # <VOICES_DIR>/<LANGUAGE>/<VOICE>
+            found_voice = False
+            for voices_dir in voices_dirs:
+                if not voices_dir.is_dir():
+                    continue
+
+                # <LANGUAGE>
+                for lang_dir in voices_dir.iterdir():
+                    if not lang_dir.is_dir():
+                        continue
+
+                    # <VOICE>
+                    for maybe_tts_model_dir in lang_dir.iterdir():
+                        if not maybe_tts_model_dir.is_dir():
+                            continue
+
+                        if (maybe_tts_model_dir.name == voice_str) and valid_voice_dir(
+                            maybe_tts_model_dir
+                        ):
+                            tts_model_dir = maybe_tts_model_dir
+                            language = lang_dir.name
+                            found_voice = True
+                            break
+
+                    if found_voice:
+                        break
+
+                if found_voice:
+                    break
+
+        assert tts_model_dir is not None, f"Voice '{voice}' not found in {voices_dirs}"
+        assert language is not None, f"Language not set for {voice}"
+
         # Load TTS model
-        tts_model_path = _VOICES_DIR / language / voice_str
+        _voice_name, tts_system = voice_str.split("-", maxsplit=1)
         tts_model = load_tts_model(
             model_type=tts_system,
-            model_path=tts_model_path,
+            model_path=tts_model_dir,
             no_optimizations=args.no_optimizations,
         )
+        setattr(tts_model, "language", language)
+
         _TTS_MODELS[voice] = tts_model
+        _TTS_MODELS[voice_str] = tts_model
 
         # Load audio settings
-        tts_config_path = tts_model_path / "config.json"
+        tts_config_path = tts_model_dir / "config.json"
         if tts_config_path.is_file():
             _LOGGER.debug("Loading audio settings from %s", tts_config_path)
             with open(tts_config_path, "r") as tts_config_file:
@@ -218,13 +235,25 @@ async def text_to_wav(
 
     audio_settings = _AUDIO_SETTINGS.get(voice, _DEFAULT_AUDIO_SETTINGS)
 
-    # <VOCODER_SYSTEM>/<MODEL_NAME>
-    vocoder_system, vocoder_name = vocoder.split("/", maxsplit=1)
+    # Load vocoder
 
+    # <VOCODER_SYSTEM>/<MODEL_NAME>
     vocoder_model = _VOCODER_MODELS.get(vocoder)
     if vocoder_model is None:
+        vocoder_system, vocoder_name = vocoder.split("/", maxsplit=1)
+
         # Load vocoder
-        vocoder_model_path = _VOICES_DIR / vocoder_system / vocoder_name
+        vocoder_model_path: typing.Optional[Path] = None
+        for voices_dir in voices_dirs:
+            maybe_vocoder_model_path = voices_dir / vocoder_system / vocoder_name
+            if valid_voice_dir(maybe_vocoder_model_path):
+                vocoder_model_path = maybe_vocoder_model_path
+                break
+
+        assert (
+            vocoder_model_path is not None
+        ), f"Vocoder '{vocoder}' not found in {voices_dirs}"
+
         vocoder_model = load_vocoder_model(
             model_type=vocoder_system,
             model_path=vocoder_model_path,
@@ -256,7 +285,7 @@ async def text_to_wav(
         functools.partial(
             text_to_speech,
             text=text,
-            lang=language,
+            lang=tts_model.language,
             tts_model=tts_model,
             vocoder_model=vocoder_model,
             audio_settings=audio_settings,
@@ -274,7 +303,7 @@ async def text_to_wav(
         wav_bytes = wav_io.getvalue()
 
     end_time = time.time()
-    _LOGGER.debug(
+    _LOGGER.info(
         "Synthesized %s byte(s) in %s second(s)", len(wav_bytes), end_time - start_time
     )
 
@@ -285,26 +314,27 @@ def get_voices() -> typing.Dict[str, typing.Dict[str, str]]:
     """Get dict of voices"""
     voices = {}
 
-    # <LANGUAGE>/<VOICE>-<TTS_SYSTEM>
-    for lang_dir in _VOICES_DIR.iterdir():
-        if (not lang_dir.is_dir()) or (lang_dir.name in _VOCODER_DIR_NAMES):
-            continue
-
-        language = lang_dir.name
-
-        for voice_dir in lang_dir.iterdir():
-            if not voice_dir.is_dir():
+    for voices_dir in voices_dirs:
+        # <LANGUAGE>/<VOICE>-<TTS_SYSTEM>
+        for lang_dir in voices_dir.iterdir():
+            if (not lang_dir.is_dir()) or (lang_dir.name in _VOCODER_DIR_NAMES):
                 continue
 
-            voice_name, tts_system = voice_dir.name.split("-", maxsplit=1)
-            voice_id = f"{language}/{voice_dir.name}"
+            language = lang_dir.name
 
-            voices[voice_id] = {
-                "id": voice_id,
-                "name": voice_name,
-                "language": language,
-                "tts_system": tts_system,
-            }
+            for voice_dir in lang_dir.iterdir():
+                if not valid_voice_dir(voice_dir):
+                    continue
+
+                voice_name, tts_system = voice_dir.name.split("-", maxsplit=1)
+                voice_id = f"{language}/{voice_dir.name}"
+
+                voices[voice_id] = {
+                    "id": voice_id,
+                    "name": voice_name,
+                    "language": language,
+                    "tts_system": tts_system,
+                }
 
     return voices
 
@@ -325,23 +355,30 @@ async def app_vocoders() -> Response:
     """Get available vocoders."""
     vocoders = []
 
-    # <VOCODER_SYSTEM>/<VOCODER_MODEL>
-    for vocoder_dir in _VOICES_DIR.iterdir():
-        if (not vocoder_dir.is_dir()) or (vocoder_dir.name not in _VOCODER_DIR_NAMES):
-            continue
-
-        vocoder_system = vocoder_dir.name
-
-        for model_dir in vocoder_dir.iterdir():
-            if not model_dir.is_dir():
+    for voices_dir in voices_dirs:
+        # <VOCODER_SYSTEM>/<VOCODER_MODEL>
+        for vocoder_dir in voices_dir.iterdir():
+            if (not vocoder_dir.is_dir()) or (
+                vocoder_dir.name not in _VOCODER_DIR_NAMES
+            ):
                 continue
 
-            model_name = model_dir.name
-            vocoder_id = f"{vocoder_system}/{model_name}"
+            vocoder_system = vocoder_dir.name
 
-            vocoders.append(
-                {"id": vocoder_id, "name": model_name, "vocoder_system": vocoder_system}
-            )
+            for model_dir in vocoder_dir.iterdir():
+                if not valid_voice_dir(model_dir):
+                    continue
+
+                model_name = model_dir.name
+                vocoder_id = f"{vocoder_system}/{model_name}"
+
+                vocoders.append(
+                    {
+                        "id": vocoder_id,
+                        "name": model_name,
+                        "vocoder_system": vocoder_system,
+                    }
+                )
 
     return jsonify(vocoders)
 

@@ -2,7 +2,7 @@ eva_k eva_k-glow_tts de-de_eva_k-glow_tts
 karlsson karlsson-glow_tts de-de_karlsson-glow_tts
 pavoque pavoque-glow_tts de-de_pavoque-glow_tts
 rebecca_braunert_plunkett rebecca_braunert_plunkett-glow_tts de-de_rebecca_braunert_plunkett-glow_tts
-thorsten thorsten-glow_tts de-de_thorsten-glow_tts
+de de-de thorsten thorsten-glow_tts de-de_thorsten-glow_tts
 blizzard_fls blizzard_fls-glow_tts en-us_blizzard_fls-glow_tts
 cmu_aew cmu_aew-glow_tts en-us_cmu_aew-glow_tts
 cmu_ahw cmu_ahw-glow_tts en-us_cmu_ahw-glow_tts
@@ -23,18 +23,19 @@ ek ek-glow_tts en-us_ek-glow_tts
 harvard harvard-glow_tts en-us_harvard-glow_tts
 kathleen kathleen-glow_tts en-us_kathleen-glow_tts
 ljspeech ljspeech-glow_tts en-us_ljspeech-glow_tts
-mary_ann mary_ann-glow_tts en-us_mary_ann-glow_tts
-carlfm carlfm-glow_tts es-es_carlfm-glow_tts
+en en-us mary_ann mary_ann-glow_tts en-us_mary_ann-glow_tts
+es es-es carlfm carlfm-glow_tts es-es_carlfm-glow_tts
 karen_savage karen_savage-glow_tts es-es_karen_savage-glow_tts
 gilles_le_blanc gilles_le_blanc-glow_tts fr-fr_gilles_le_blanc-glow_tts
-siwis siwis-glow_tts fr-fr_siwis-glow_tts
+fr fr-fr siwis siwis-glow_tts fr-fr_siwis-glow_tts
 tom tom-glow_tts fr-fr_tom-glow_tts
-lisa lisa-glow_tts it-it_lisa-glow_tts
+it it-it lisa lisa-glow_tts it-it_lisa-glow_tts
 riccardo_fasol riccardo_fasol-glow_tts it-it_riccardo_fasol-glow_tts
 bart_de_leeuw bart_de_leeuw-glow_tts nl_bart_de_leeuw-glow_tts
 flemishguy flemishguy-glow_tts nl_flemishguy-glow_tts
-rdh rdh-glow_tts nl_rdh-glow_tts
+nl rdh rdh-glow_tts nl_rdh-glow_tts
 hajdurova hajdurova-glow_tts ru-ru_hajdurova-glow_tts
 minaev minaev-glow_tts ru-ru_minaev-glow_tts
-nikolaev nikolaev-glow_tts ru-ru_nikolaev-glow_tts
-talesyntese talesyntese-glow_tts sv-se_talesyntese-glow_tts
+ru ru-ru nikolaev nikolaev-glow_tts ru-ru_nikolaev-glow_tts
+sv sv-se talesyntese talesyntese-glow_tts sv-se_talesyntese-glow_tts
+sw biblia_takatifu biblia_takatifu-glow_tts

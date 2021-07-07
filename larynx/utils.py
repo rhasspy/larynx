@@ -1,5 +1,6 @@
 """Utility methods for Larynx"""
 import logging
+import os
 import shutil
 import tempfile
 import typing
@@ -9,7 +10,9 @@ import gruut_ipa
 import requests
 from tqdm.auto import tqdm
 
+_DIR = Path(__file__).parent
 _LOGGER = logging.getLogger("larynx.utils")
+_ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
 
 # Allow ' for primary stress and , for secondary stress
 # Allow : for elongation
@@ -23,6 +26,42 @@ _IPA_TRANSLATE = str.maketrans(
         ]
     ),
 )
+
+# alias -> full name
+VOICE_ALIASES: typing.Dict[str, str] = {}
+
+# voice -> <name>.tar.gz
+VOICE_DOWNLOAD_NAMES: typing.Dict[str, str] = {}
+
+
+def load_voices_aliases():
+    """Load voice aliases from VOICES file"""
+    if not VOICE_ALIASES:
+        # Load voice aliases
+        with open(_DIR / "VOICES", "r") as voices_file:
+            for line in voices_file:
+                line = line.strip()
+                if not line:
+                    continue
+
+                # alias alias ... full_name download_name
+                *voice_aliases, full_voice_name, download_name = line.split()
+                for voice_alias in voice_aliases:
+                    VOICE_ALIASES[voice_alias] = full_voice_name
+                    VOICE_DOWNLOAD_NAMES[full_voice_name] = download_name
+
+
+def resolve_voice_name(voice_name: str) -> str:
+    """Resolve voice name using aliases"""
+    load_voices_aliases()
+    return VOICE_ALIASES.get(voice_name, voice_name)
+
+
+def get_voice_download_name(voice_name: str) -> str:
+    """Get name of .tar.gz file name for voice (without extension)"""
+    voice_name = resolve_voice_name(voice_name)
+    return VOICE_DOWNLOAD_NAMES.get(voice_name, voice_name)
+
 
 # -----------------------------------------------------------------------------
 
@@ -86,6 +125,36 @@ def download_voice(
 
 
 # -----------------------------------------------------------------------------
+
+
+def get_voices_dirs(
+    voices_dir: typing.Optional[typing.Union[str, Path]] = None
+) -> typing.List[Path]:
+    """Get directories to search for voices"""
+    # Directories to search for voices
+    voices_dirs: typing.List[Path] = []
+
+    if voices_dir:
+        # 1. Use --voices-dir
+        voices_dirs.append(Path(voices_dir))
+
+    # 2. Use environment variable
+    env_dir = os.environ.get(_ENV_VOICES_DIR)
+    if env_dir is not None:
+        voices_dirs.append(Path(env_dir))
+
+    # 3. Use ${XDG_DATA_HOME}/larynx/voices
+    maybe_data_home = os.environ.get("XDG_DATA_HOME")
+    if maybe_data_home:
+        voices_dirs.append(Path(maybe_data_home) / "larynx" / "voices")
+    else:
+        # ~/.local/share/larynx/voices
+        voices_dirs.append(Path.home() / ".local" / "share" / "larynx" / "voices")
+
+    # 4. Use local directory next to module
+    voices_dirs.append(_DIR.parent / "local")
+
+    return voices_dirs
 
 
 def valid_voice_dir(voice_dir: typing.Union[str, Path]) -> bool:

@@ -18,12 +18,16 @@ import numpy as np
 from . import load_tts_model, load_vocoder_model, text_to_speech
 from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
-from .utils import download_voice, valid_voice_dir
+from .utils import (
+    download_voice,
+    get_voice_download_name,
+    get_voices_dirs,
+    resolve_voice_name,
+    valid_voice_dir,
+)
 from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
-_DEFAULT_VOICES_DIR = _DIR.parent / "local"
-_ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
 _DEFAULT_URL_FORMAT = (
     "http://github.com/rhasspy/larynx/releases/download/2021-03-28/{voice}.tar.gz"
 )
@@ -217,31 +221,6 @@ def main():
 
 # -----------------------------------------------------------------------------
 
-# Default voices for each language
-VOICE_ALIASES = {
-    "de": "thorsten-glow_tts",
-    "de-de": "thorsten-glow_tts",
-    "en": "mary_ann-glow_tts",
-    "en-us": "mary_ann-glow_tts",
-    "es": "carlfm-glow_tts",
-    "es-es": "carlfm-glow_tts",
-    "fr": "siwis-glow_tts",
-    "fr-fr": "siwis-glow_tts",
-    "it": "lisa-glow_tts",
-    "it-it": "lisa-glow_tts",
-    "nl": "rdh-glow_tts",
-    "ru": "nikolaev-glow_tts",
-    "ru-ru": "nikolaev-glow_tts",
-    "sv": "talesyntese-glow_tts",
-    "sv-se": "talesyntese-glow_tts",
-    "sw": "biblia_takatifu-glow_tts",
-}
-
-# voice -> <name>.tar.gz
-VOICE_DOWNLOAD_NAMES = {}
-
-# -----------------------------------------------------------------------------
-
 
 def get_args():
     """Parse command-line arguments"""
@@ -395,26 +374,7 @@ def get_args():
     # -------------------------------------------------------------------------
 
     # Directories to search for voices
-    voices_dirs: typing.List[Path] = []
-
-    if args.voices_dir:
-        # 1. Use --voices-dir
-        voices_dirs.append(Path(args.voices_dir))
-
-    # 2. Use environment variable
-    if _ENV_VOICES_DIR in os.environ:
-        voices_dirs.append(Path(os.environ.get(_ENV_VOICES_DIR)))
-
-    # 3. Use ${XDG_DATA_HOME}/larynx/voices
-    maybe_data_home = os.environ.get("XDG_DATA_HOME")
-    if maybe_data_home:
-        voices_dirs.append(Path(maybe_data_home) / "larynx" / "voices")
-    else:
-        # ~/.local/share/larynx/voices
-        voices_dirs.append(Path.home() / ".local" / "share" / "larynx" / "voices")
-
-    # 4. Use local directory next to module
-    voices_dirs.append(_DIR.parent / "local")
+    voices_dirs = get_voices_dirs(args.voices_dir)
 
     def list_voices_vocoders():
         """Print all vocoders and voices"""
@@ -464,21 +424,6 @@ def get_args():
 
     # -------------------------------------------------------------------------
 
-    # Load voice aliases
-    with open(_DIR / "VOICES", "r") as voices_file:
-        for line in voices_file:
-            line = line.strip()
-            if not line:
-                continue
-
-            # alias alias ... full_name download_name
-            *voice_aliases, full_voice_name, download_name = line.split()
-            for voice_alias in voice_aliases:
-                VOICE_ALIASES[voice_alias] = full_voice_name
-                VOICE_DOWNLOAD_NAMES[full_voice_name] = download_name
-
-    # -------------------------------------------------------------------------
-
     # Set defaults
     setattr(args, "tts_model_type", None)
     setattr(args, "tts_model", None)
@@ -487,7 +432,7 @@ def get_args():
 
     if args.voice:
         # Resolve aliases
-        args.voice = VOICE_ALIASES.get(args.voice, args.voice)
+        args.voice = resolve_voice_name(args.voice)
         tts_model_dir: typing.Optional[Path] = None
 
         if args.language:
@@ -506,7 +451,7 @@ def get_args():
                         break
 
         if (tts_model_dir is None) and (not args.no_download):
-            url_voice = VOICE_DOWNLOAD_NAMES.get(args.voice)
+            url_voice = get_voice_download_name(args.voice)
             assert url_voice is not None, f"No download name for voice {args.voice}"
 
             url = args.url_format.format(voice=url_voice)
