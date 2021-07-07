@@ -506,8 +506,8 @@ def get_args():
             args.tts_model = tts_model_value
 
     if args.tts_model is None:
-        _LOGGER.fatal("A TTS model is required")
         list_voices_vocoders()
+        _LOGGER.info("--voice required (see list above)")
         sys.exit(1)
 
     if not args.language:

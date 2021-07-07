@@ -20,45 +20,7 @@ out_version="${version}"
 # -----------------------------------------------------------------------------
 
 : "${PLATFORMS=linux/amd64,linux/arm/v7,linux/arm64}"
-
-DOCKERFILE="${src_dir}/Dockerfile.debian"
-
-if [[ -n "${PROXY}" ]]; then
-    if [[ -z "${PROXY_HOST}" ]]; then
-        export PROXY_HOST="$(hostname -I | awk '{print $1}')"
-    fi
-
-    : "${APT_PROXY_HOST=${PROXY_HOST}}"
-    : "${APT_PROXY_PORT=3142}"
-    : "${PYPI_PROXY_HOST=${PROXY_HOST}}"
-    : "${PYPI_PROXY_PORT=4000}"
-
-    if [[ -z "NO_APT_PROXY" ]]; then
-        export APT_PROXY='1'
-        export APT_PROXY_HOST
-        export APT_PROXY_PORT
-        echo "APT proxy: ${APT_PROXY_HOST}:${APT_PROXY_PORT}"
-    fi
-
-    if [[ -z "NO_PYPI_PROXY" ]]; then
-        export PYPI_PROXY='1'
-        export PYPI_PROXY_HOST
-        export PYPI_PROXY_PORT
-        echo "PyPI proxy: ${PYPI_PROXY_HOST}:${PYPI_PROXY_PORT}"
-    fi
-
-    # Use temporary file instead
-    temp_dockerfile="$(mktemp -p "${src_dir}")"
-    function cleanup {
-        rm -f "${temp_dockerfile}"
-    }
-
-    trap cleanup EXIT
-
-    # Run through pre-processor to replace variables
-    "${src_dir}/docker/preprocess.sh" < "${DOCKERFILE}" > "${temp_dockerfile}"
-    DOCKERFILE="${temp_dockerfile}"
-fi
+: "${DOCKERFILE=Dockerfile.debian}"
 
 echo 'Building...'
 

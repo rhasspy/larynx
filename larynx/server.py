@@ -315,6 +315,9 @@ def get_voices() -> typing.Dict[str, typing.Dict[str, str]]:
     voices = {}
 
     for voices_dir in voices_dirs:
+        if not voices_dir.is_dir():
+            continue
+
         # <LANGUAGE>/<VOICE>-<TTS_SYSTEM>
         for lang_dir in voices_dir.iterdir():
             if (not lang_dir.is_dir()) or (lang_dir.name in _VOCODER_DIR_NAMES):
@@ -356,6 +359,9 @@ async def app_vocoders() -> Response:
     vocoders = []
 
     for voices_dir in voices_dirs:
+        if not voices_dir.is_dir():
+            continue
+
         # <VOCODER_SYSTEM>/<VOCODER_MODEL>
         for vocoder_dir in voices_dir.iterdir():
             if (not vocoder_dir.is_dir()) or (

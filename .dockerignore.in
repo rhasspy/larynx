@@ -5,6 +5,6 @@ __pycache__/
 .mypy_cache/
 dist/
 local/
-gruut/
 
 !local/hifi_gan/
+!local/en-us/mary_ann-glow_tts
