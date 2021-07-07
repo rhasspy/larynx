@@ -34,7 +34,7 @@ if [[ -n "${PIP_PREINSTALL_PACKAGES}" ]]; then
 fi
 
 if [[ -f requirements.txt ]]; then
-    pip3 ${PIP_INSTALL} -r requirements.txt
+    pip3 ${PIP_INSTALL} -f 'https://synesthesiam.github.io/prebuilt-apps/' -r requirements.txt
 fi
 
 
