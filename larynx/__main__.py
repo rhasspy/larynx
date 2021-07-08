@@ -13,10 +13,6 @@ import typing
 from enum import Enum
 from pathlib import Path
 
-import numpy as np
-
-from . import load_tts_model, load_vocoder_model, text_to_speech
-from .audio import AudioSettings
 from .constants import TextToSpeechType, VocoderType
 from .utils import (
     download_voice,
@@ -25,7 +21,6 @@ from .utils import (
     resolve_voice_name,
     valid_voice_dir,
 )
-from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
 _DEFAULT_URL_FORMAT = (
@@ -51,6 +46,10 @@ class OutputNaming(str, Enum):
 def main():
     """Main entry point"""
     args = get_args()
+
+    import numpy as np
+
+    from .audio import AudioSettings
 
     # Load audio settings
     maybe_config_path: typing.Optional[Path] = None
@@ -82,6 +81,11 @@ def main():
 
     if args.csv:
         args.output_naming = "id"
+
+    # -------------------------------------------------------------------------
+
+    from . import load_tts_model, load_vocoder_model, text_to_speech
+    from .wavfile import write as wav_write
 
     # Load TTS
     _LOGGER.debug(

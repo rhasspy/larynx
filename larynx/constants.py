@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 import typing
 from abc import ABC
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-import numpy as np
-import onnxruntime
+if typing.TYPE_CHECKING:
+    # Only import here if type checking
+    import numpy as np
+    import onnxruntime
 
 # -----------------------------------------------------------------------------
 

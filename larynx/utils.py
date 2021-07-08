@@ -6,26 +6,9 @@ import tempfile
 import typing
 from pathlib import Path
 
-import gruut_ipa
-import requests
-from tqdm.auto import tqdm
-
 _DIR = Path(__file__).parent
 _LOGGER = logging.getLogger("larynx.utils")
 _ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
-
-# Allow ' for primary stress and , for secondary stress
-# Allow : for elongation
-_IPA_TRANSLATE = str.maketrans(
-    "',:",
-    "".join(
-        [
-            gruut_ipa.IPA.STRESS_PRIMARY.value,
-            gruut_ipa.IPA.STRESS_SECONDARY.value,
-            gruut_ipa.IPA.LONG,
-        ]
-    ),
-)
 
 # alias -> full name
 VOICE_ALIASES: typing.Dict[str, str] = {}
@@ -70,6 +53,9 @@ def download_voice(
     voice_name: str, voices_dir: typing.Union[str, Path], link: str
 ) -> Path:
     """Download and extract a voice (or vocoder)"""
+    import requests
+    from tqdm.auto import tqdm
+
     voices_dir = Path(voices_dir)
     voices_dir.mkdir(parents=True, exist_ok=True)
 

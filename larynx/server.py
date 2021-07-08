@@ -285,7 +285,7 @@ async def text_to_wav(
         functools.partial(
             text_to_speech,
             text=text,
-            lang=tts_model.language,
+            lang=tts_model.language,  # type: ignore
             tts_model=tts_model,
             vocoder_model=vocoder_model,
             audio_settings=audio_settings,
