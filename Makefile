@@ -1,6 +1,6 @@
 SHELL := bash
 
-.PHONY: check clean reformat dist docker amd64
+.PHONY: check clean reformat dist docker amd64 index
 
 all: dist
 
@@ -24,3 +24,6 @@ docker:
 
 amd64:
 	NOBUILDX=1 scripts/build-docker.sh
+
+index:
+	bin/make_sample_html.py local/ > index.html
