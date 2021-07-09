@@ -4,10 +4,11 @@ import typing
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import gruut
 import gruut_ipa
 import numpy as np
 import onnxruntime
+
+import gruut
 
 from .audio import AudioSettings
 from .constants import (
@@ -54,6 +55,7 @@ def text_to_speech(
     number_converters: bool = False,
     disable_currency: bool = False,
     word_indexes: bool = False,
+    inline_pronunciations: bool = False,
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     max_workers: typing.Optional[int] = 2,
@@ -79,6 +81,7 @@ def text_to_speech(
                 text,
                 lang=lang,
                 return_format="sentences",
+                inline_pronunciations=inline_pronunciations,
                 tokenizer_args={
                     "use_number_converters": number_converters,
                     "do_replace_currency": (not disable_currency),

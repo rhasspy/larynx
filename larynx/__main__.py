@@ -153,6 +153,7 @@ def main():
             number_converters=args.number_converters,
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
+            inline_pronunciations=args.inline,
             tts_settings=tts_settings,
             max_workers=(
                 None if args.max_thread_workers <= 0 else args.max_thread_workers
@@ -290,6 +291,11 @@ def get_args():
         "--number-converters",
         action="store_true",
         help="Allow number_conv form for specifying num2words converter (cardinal, ordinal, ordinal_num, year, currency)",
+    )
+    parser.add_argument(
+        "--inline",
+        action="store_true",
+        help="Enable inline phonemes and word pronunciations",
     )
 
     # TTS models

@@ -38,7 +38,7 @@ paths:
           description: 'Strength of vocoder denoiser (0-1, 0 is disabled)'
           schema:
             type: number
-            example: 0.005
+            example: 0.002
         - in: query
           name: noiseScale
           description: 'Volatility of speaker (0-1, default: 0.333, GlowTTS only)'
@@ -51,6 +51,12 @@ paths:
           schema:
             type: number
             example: 0.85
+        - in: query
+          name: inlinePronunciations
+          description: 'Enable inline [[ phonemes ]] or {{ par{tial} words }} in text'
+          schema:
+            type: boolean
+            example: false
       produces:
         - audio/wav
       responses:
@@ -87,7 +93,7 @@ paths:
           description: 'Strength of vocoder denoiser (0-1, 0 is disabled)'
           schema:
             type: number
-            example: 0.005
+            example: 0.002
         - in: query
           name: noiseScale
           description: 'Volatility of speaker (0-1, default: 0.333, GlowTTS only)'
@@ -100,6 +106,12 @@ paths:
           schema:
             type: number
             example: 0.85
+        - in: query
+          name: inlinePronunciations
+          description: 'Enable inline [[ phonemes ]] or {{ par{tial} words }} in text'
+          schema:
+            type: boolean
+            example: false
       produces:
         - audio/wav
       responses:

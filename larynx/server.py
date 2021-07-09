@@ -14,7 +14,6 @@ from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
 
-import gruut
 import gruut_ipa
 import hypercorn
 import numpy as np
@@ -28,6 +27,8 @@ from quart import (
     send_from_directory,
 )
 from swagger_ui import quart_api_doc
+
+import gruut
 
 from . import (
     TextToSpeechModel,
@@ -149,6 +150,7 @@ async def text_to_wav(
     denoiser_strength: typing.Optional[float] = None,
     noise_scale: typing.Optional[float] = None,
     length_scale: typing.Optional[float] = None,
+    inline_pronunciations: bool = False,
 ) -> bytes:
     """Runs TTS for each line and accumulates all audio into a single WAV."""
     language: typing.Optional[str] = None
@@ -291,6 +293,7 @@ async def text_to_wav(
             audio_settings=audio_settings,
             tts_settings=tts_settings,
             vocoder_settings=vocoder_settings,
+            inline_pronunciations=inline_pronunciations,
         ),
     )
 
@@ -395,6 +398,12 @@ async def app_say() -> Response:
     voice = request.args.get("voice", "")
     assert voice, "No voice provided"
 
+    # If true, [[ phonemes ]] in brackets are spoken literally.
+    # Additionally, {{ par{tial} word{s} }} can be used.
+    inline_pronunciations = request.args.get(
+        "inlinePronunciations", ""
+    ).strip().lower() in {"true", "1"}
+
     # TTS settings
     noise_scale = request.args.get("noiseScale", args.noise_scale)
     if noise_scale is not None:
@@ -426,6 +435,7 @@ async def app_say() -> Response:
         denoiser_strength=denoiser_strength,
         noise_scale=noise_scale,
         length_scale=length_scale,
+        inline_pronunciations=inline_pronunciations,
     )
 
     return Response(wav_bytes, mimetype="audio/wav")
