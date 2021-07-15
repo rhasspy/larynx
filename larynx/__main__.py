@@ -82,6 +82,46 @@ def main():
     if args.csv:
         args.output_naming = "id"
 
+    # Phoneme transformation
+    phoneme_lang: typing.Optional[str] = None
+    phoneme_transform: typing.Optional[typing.Callable[[str], str]] = None
+    if args.phoneme_language:
+        from gruut.lang import resolve_lang
+
+        phoneme_lang = resolve_lang(args.phoneme_language)
+        phoneme_map: typing.Dict[str, typing.Union[str, typing.List[str]]] = {}
+
+        if len(args.phoneme_map) > 1:
+            phoneme_map_path = args.phoneme_map[1]
+            with open(phoneme_map_path, "r") as phoneme_map_file:
+                phoneme_map = json.load(phoneme_map_file)
+        else:
+            # Guess phoneme map
+            from gruut_ipa import Phonemes
+            from gruut_ipa.accent import guess_phonemes
+
+            from_phonemes, to_phonemes = (
+                Phonemes.from_language(args.language),
+                Phonemes.from_language(phoneme_lang),
+            )
+
+            phoneme_map = {
+                from_p.text: [to_p.text for to_p in guess_phonemes(from_p, to_phonemes)]
+                for from_p in from_phonemes
+            }
+
+            _LOGGER.debug(
+                "Guessed phoneme map from %s to %s: %s",
+                args.language,
+                phoneme_lang,
+                phoneme_map,
+            )
+
+        def phoneme_map_transform(p):
+            phoneme_map.get(p, p)
+
+        phoneme_transform = phoneme_map_transform
+
     # -------------------------------------------------------------------------
 
     from . import load_tts_model, load_vocoder_model, text_to_speech
@@ -154,6 +194,8 @@ def main():
             disable_currency=args.disable_currency,
             word_indexes=args.word_indexes,
             inline_pronunciations=args.inline,
+            phoneme_transform=phoneme_transform,
+            phoneme_lang=phoneme_lang,
             tts_settings=tts_settings,
             max_workers=(
                 None if args.max_thread_workers <= 0 else args.max_thread_workers
@@ -296,6 +338,13 @@ def get_args():
         "--inline",
         action="store_true",
         help="Enable inline phonemes and word pronunciations",
+    )
+
+    # Phonemes
+    parser.add_argument("--phoneme-language", help="Target language of voice phonemes")
+    parser.add_argument(
+        "--phoneme-map",
+        help="Path to JSON file with mapping from text phonemes to voice phonemes",
     )
 
     # TTS models
@@ -446,14 +495,19 @@ def get_args():
         tts_model_dir: typing.Optional[Path] = None
 
         if args.language:
-            # Use directory under language
+            from gruut.lang import resolve_lang
+
+            args.language = resolve_lang(args.language)
+
+            # Use directory under language first
             for voices_dir in voices_dirs:
                 maybe_tts_model_dir = voices_dir / args.language / args.voice
                 if valid_voice_dir(maybe_tts_model_dir):
                     tts_model_dir = maybe_tts_model_dir
                     break
-        else:
-            # Search for voice
+
+        if tts_model_dir is None:
+            # Search for voice in all directories
             for voices_dir in voices_dirs:
                 for model_dir in voices_dir.rglob(args.voice):
                     if valid_voice_dir(model_dir):

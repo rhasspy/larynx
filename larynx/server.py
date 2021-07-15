@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
 
+import gruut
 import gruut_ipa
 import hypercorn
 import numpy as np
@@ -27,8 +28,6 @@ from quart import (
     send_from_directory,
 )
 from swagger_ui import quart_api_doc
-
-import gruut
 
 from . import (
     TextToSpeechModel,

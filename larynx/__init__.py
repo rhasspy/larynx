@@ -4,11 +4,10 @@ import typing
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import gruut
 import gruut_ipa
 import numpy as np
 import onnxruntime
-
-import gruut
 
 from .audio import AudioSettings
 from .constants import (
@@ -56,19 +55,25 @@ def text_to_speech(
     disable_currency: bool = False,
     word_indexes: bool = False,
     inline_pronunciations: bool = False,
+    phoneme_transform: typing.Optional[typing.Callable[[str], str]] = None,
+    text_lang: typing.Optional[str] = None,
+    phoneme_lang: typing.Optional[str] = None,
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     max_workers: typing.Optional[int] = 2,
 ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
-    phoneme_to_id = _PHONEME_TO_ID.get(lang)
+    phoneme_lang = phoneme_lang or lang
+    text_lang = text_lang or lang
+
+    phoneme_to_id = _PHONEME_TO_ID.get(phoneme_lang)
     if phoneme_to_id is None:
-        no_stress = not _LANG_STRESS.get(lang, False)
-        phonemes_list = gruut.lang.id_to_phonemes(lang, no_stress=no_stress)
+        no_stress = not _LANG_STRESS.get(phoneme_lang, False)
+        phonemes_list = gruut.lang.id_to_phonemes(phoneme_lang, no_stress=no_stress)
         phoneme_to_id = {p: i for i, p in enumerate(phonemes_list)}
         _LOGGER.debug(phoneme_to_id)
 
-        _PHONEME_TO_ID[lang] = phoneme_to_id
+        _PHONEME_TO_ID[phoneme_lang] = phoneme_to_id
 
     # -------------------------------------------------------------------------
     # Tokenization/Phonemization
@@ -79,7 +84,7 @@ def text_to_speech(
         list(
             gruut.text_to_phonemes(
                 text,
-                lang=lang,
+                lang=text_lang,
                 return_format="sentences",
                 inline_pronunciations=inline_pronunciations,
                 tokenizer_args={
@@ -131,11 +136,33 @@ def text_to_speech(
 
             # ---------------------------------------------------------------------
 
+            if phoneme_transform is not None:
+                mapped_phonemes = []
+                for phoneme in text_phonemes:
+                    mapped_phoneme = phoneme_transform(phoneme)
+                    if isinstance(mapped_phoneme, str):
+                        mapped_phonemes.append(mapped_phoneme)
+                    else:
+                        # List
+                        mapped_phonemes.extend(mapped_phoneme)
+
+                text_phonemes = mapped_phonemes
+
             _LOGGER.debug("Words for '%s': %s", sentence.raw_text, sentence.clean_words)
             _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
 
             # Convert to phoneme ids
-            phoneme_ids = np.array([phoneme_to_id[p] for p in text_phonemes])
+            phoneme_ids_list = []
+            for phoneme in text_phonemes:
+                phoneme_id = phoneme_to_id.get(phoneme)
+                if phoneme_id is not None:
+                    phoneme_ids_list.append(phoneme_id)
+                elif not gruut_ipa.IPA.is_stress(phoneme):
+                    _LOGGER.warning(
+                        "%s is missing from voice phoneme inventory", phoneme
+                    )
+
+            phoneme_ids = np.array(phoneme_ids_list)
 
             future = executor.submit(
                 _sentence_task,
