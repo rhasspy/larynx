@@ -1,4 +1,5 @@
 import logging
+import threading
 import typing
 
 import numpy as np
@@ -36,8 +37,11 @@ class HiFiGanVocoder(VocoderModel):
         self.denoiser_strength = config.denoiser_strength
         self.bias_spec: typing.Optional[np.ndarray] = None
 
+        self.denoiser_lock = threading.RLock()
+
         if self.denoiser_strength > 0:
-            self.maybe_init_denoiser()
+            # Initialize in a separate thread
+            threading.Thread(target=self.maybe_init_denoiser, daemon=True).start()
 
     def mels_to_audio(
         self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
@@ -70,10 +74,11 @@ class HiFiGanVocoder(VocoderModel):
         return audio_denoised
 
     def maybe_init_denoiser(self):
-        if self.bias_spec is None:
-            _LOGGER.debug("Initializing denoiser")
-            mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
-            bias_audio = self.generator.run(None, {"mel": mel_zeros})[0].squeeze(0)
-            bias_spec, _ = transform(bias_audio)
+        with self.denoiser_lock:
+            if self.bias_spec is None:
+                _LOGGER.debug("Initializing denoiser")
+                mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
+                bias_audio = self.generator.run(None, {"mel": mel_zeros})[0].squeeze(0)
+                bias_spec, _ = transform(bias_audio)
 
-            self.bias_spec = bias_spec[:, :, 0][:, :, None]
+                self.bias_spec = bias_spec[:, :, 0][:, :, None]

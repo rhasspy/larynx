@@ -1,4 +1,5 @@
 import logging
+import threading
 import typing
 
 import numpy as np
@@ -41,8 +42,10 @@ class WaveGlowVocoder(VocoderModel):
         self.denoiser_strength = config.denoiser_strength
         self.bias_spec: typing.Optional[np.ndarray] = None
 
+        self.denoiser_lock = threading.RLock()
+
         if self.denoiser_strength > 0:
-            self.maybe_init_denoiser()
+            threading.Thread(target=self.maybe_init_denoiser(), daemon=True).start()
 
     def mels_to_audio(
         self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
@@ -82,13 +85,14 @@ class WaveGlowVocoder(VocoderModel):
         return audio_denoised
 
     def maybe_init_denoiser(self):
-        if self.bias_spec is None:
-            _LOGGER.debug("Initializing denoiser")
-            mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
-            z = self.make_z(mel_zeros)
-            bias_audio = self.waveglow.run(None, {"mel": mel_zeros, "z": z})[0].astype(
-                np.float32
-            )
-            bias_spec, _ = transform(bias_audio)
+        with self.denoiser_lock:
+            if self.bias_spec is None:
+                _LOGGER.debug("Initializing denoiser")
+                mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
+                z = self.make_z(mel_zeros)
+                bias_audio = self.waveglow.run(None, {"mel": mel_zeros, "z": z})[
+                    0
+                ].astype(np.float32)
+                bias_spec, _ = transform(bias_audio)
 
-            self.bias_spec = bias_spec[:, :, 0][:, :, None]
+                self.bias_spec = bias_spec[:, :, 0][:, :, None]

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import typing
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
 
@@ -127,17 +128,6 @@ def main():
     from . import load_tts_model, load_vocoder_model, text_to_speech
     from .wavfile import write as wav_write
 
-    # Load TTS
-    _LOGGER.debug(
-        "Loading text to speech model (%s, %s)", args.tts_model_type, args.tts_model
-    )
-
-    tts_model = load_tts_model(
-        model_type=args.tts_model_type,
-        model_path=args.tts_model,
-        no_optimizations=args.no_optimizations,
-    )
-
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None
     if args.tts_model_type == TextToSpeechType.GLOW_TTS:
         tts_settings = {
@@ -145,17 +135,66 @@ def main():
             "length_scale": args.length_scale,
         }
 
-    # Load vocoder
-    _LOGGER.debug(
-        "Loading vocoder model (%s, %s)", args.vocoder_model_type, args.vocoder_model
-    )
+    def async_load_tts():
+        # Load TTS
+        start_load_time = time.perf_counter()
+        _LOGGER.debug(
+            "Loading text to speech model (%s, %s)", args.tts_model_type, args.tts_model
+        )
 
-    vocoder_model = load_vocoder_model(
-        model_type=args.vocoder_model_type,
-        model_path=args.vocoder_model,
-        no_optimizations=args.no_optimizations,
-        denoiser_strength=args.denoiser_strength,
+        tts_model = load_tts_model(
+            model_type=args.tts_model_type,
+            model_path=args.tts_model,
+            no_optimizations=args.no_optimizations,
+        )
+
+        end_load_time = time.perf_counter()
+        _LOGGER.debug(
+            "Loaded text to speech model in %s second(s)",
+            end_load_time - start_load_time,
+        )
+
+        return tts_model
+
+    def async_load_vocoder():
+        # Load vocoder
+        start_load_time = time.perf_counter()
+        _LOGGER.debug(
+            "Loading vocoder model (%s, %s)",
+            args.vocoder_model_type,
+            args.vocoder_model,
+        )
+
+        vocoder_model = load_vocoder_model(
+            model_type=args.vocoder_model_type,
+            model_path=args.vocoder_model,
+            no_optimizations=args.no_optimizations,
+            denoiser_strength=args.denoiser_strength,
+        )
+
+        end_load_time = time.perf_counter()
+        _LOGGER.debug("Loaded vocoder in %s second(s)", end_load_time - start_load_time)
+
+        return vocoder_model
+
+    # Load in parallel
+    max_thread_workers = (
+        None if args.max_thread_workers < 1 else args.max_thread_workers
     )
+    executor = ThreadPoolExecutor(max_workers=max_thread_workers)
+    # start_load_time = time.perf_counter()
+
+    tts_load_future = executor.submit(async_load_tts)
+    vocoder_load_future = executor.submit(async_load_vocoder)
+
+    # tts_model = tts_load_future.result()
+    # vocoder_model = vocoder_load_future.result()
+
+    # end_load_time = time.perf_counter()
+
+    # _LOGGER.debug(
+    #     "Loaded TTS/vocoder models in %s second(s)", end_load_time - start_load_time
+    # )
 
     # Read text from stdin or arguments
     if args.text:
@@ -187,8 +226,8 @@ def main():
         text_and_audios = text_to_speech(
             text=line,
             lang=args.language,
-            tts_model=tts_model,
-            vocoder_model=vocoder_model,
+            tts_model=tts_load_future,
+            vocoder_model=vocoder_load_future,
             audio_settings=audio_settings,
             number_converters=args.number_converters,
             disable_currency=args.disable_currency,
@@ -197,9 +236,8 @@ def main():
             phoneme_transform=phoneme_transform,
             phoneme_lang=phoneme_lang,
             tts_settings=tts_settings,
-            max_workers=(
-                None if args.max_thread_workers <= 0 else args.max_thread_workers
-            ),
+            max_workers=max_thread_workers,
+            executor=executor,
         )
 
         text_id = ""
@@ -441,41 +479,110 @@ def get_args():
             v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM
         )
 
-        # Print vocoders
+        # (type, name) -> location
+        local_info = {}
+
+        # Search for downloaded voices/vocoders
         for voices_dir in voices_dirs:
             if not voices_dir.is_dir():
                 continue
 
-            for vocoder_dir in sorted(voices_dir.iterdir()):
-                if not vocoder_dir.is_dir():
+            for voice_dir in voices_dir.iterdir():
+                if not voice_dir.is_dir():
                     continue
 
-                if vocoder_dir.name in sorted(vocoder_model_types):
-                    for model_dir in sorted(vocoder_dir.iterdir()):
-                        if not model_dir.is_dir():
+                if voice_dir.name in vocoder_model_types:
+                    # Vocoder
+                    for vocoder_model_dir in voice_dir.iterdir():
+                        if not vocoder_model_dir.is_dir():
                             continue
 
-                        print(
-                            "vocoder",
-                            vocoder_dir.name,
-                            model_dir.name,
-                            model_dir,
-                            sep="\t",
-                        )
+                        if vocoder_model_dir.glob("*.onnx"):
+                            full_vocoder_name = (
+                                f"{voice_dir.name}-{vocoder_model_dir.name}"
+                            )
+                            local_info[("vocoder", full_vocoder_name)] = str(
+                                vocoder_model_dir
+                            )
+                else:
+                    # Voice
+                    voice_lang = voice_dir.name
+                    for voice_model_dir in voice_dir.iterdir():
+                        if not voice_model_dir.is_dir():
+                            continue
 
-            # Print voices
-            for lang_dir in sorted(voices_dir.iterdir()):
-                if not lang_dir.is_dir():
+                        if voice_model_dir.glob("*.onnx"):
+                            local_info[("voice", voice_model_dir.name)] = str(
+                                voice_model_dir
+                            )
+
+        # (type, lang, name, downloaded, aliases, location)
+        voices_and_vocoders = []
+        with open(_DIR / "VOCODERS", "r") as vocoders_file:
+            for line in vocoders_file:
+                line = line.strip()
+                if not line:
                     continue
 
-                if lang_dir.name not in vocoder_model_types:
-                    for voice_dir in lang_dir.iterdir():
-                        if not voice_dir.is_dir():
-                            continue
+                *vocoder_aliases, full_vocoder_name = line.split()
+                downloaded = False
 
-                        print(
-                            "voice", lang_dir.name, voice_dir.name, voice_dir, sep="\t"
-                        )
+                location = local_info.get(("vocoder", full_vocoder_name), "")
+                if location:
+                    downloaded = True
+
+                voices_and_vocoders.append(
+                    (
+                        "vocoder",
+                        " ",
+                        "*" if downloaded else " ",
+                        full_vocoder_name,
+                        ",".join(vocoder_aliases),
+                        location,
+                    )
+                )
+
+        with open(_DIR / "VOICES", "r") as voices_file:
+            for line in voices_file:
+                line = line.strip()
+                if not line:
+                    continue
+
+                *voice_aliases, full_voice_name, download_name = line.split()
+                voice_lang = download_name.split("_", maxsplit=1)[0]
+
+                downloaded = False
+
+                location = local_info.get(("voice", full_voice_name), "")
+                if location:
+                    downloaded = True
+
+                voices_and_vocoders.append(
+                    (
+                        "voice",
+                        voice_lang,
+                        "*" if downloaded else " ",
+                        full_voice_name,
+                        ",".join(voice_aliases),
+                        location,
+                    )
+                )
+
+        headers = ("TYPE", "LANG", "LOCAL", "NAME", "ALIASES", "LOCATION")
+
+        # Get widths of columns
+        col_widths = [0] * len(voices_and_vocoders[0])
+        for item in voices_and_vocoders:
+            for col in range(len(col_widths)):
+                col_widths[col] = max(
+                    col_widths[col], len(item[col]) + 1, len(headers[col]) + 1
+                )
+
+        # Print results
+        print(*(h.ljust(col_widths[col]) for col, h in enumerate(headers)))
+
+        for item in sorted(voices_and_vocoders):
+            print(*(v.ljust(col_widths[col]) for col, v in enumerate(item)))
 
     if args.list:
         list_voices_vocoders()
@@ -586,9 +693,7 @@ def get_args():
     for vocoder_model_arg in vocoder_model_args:
         vocoder_model_value = getattr(args, vocoder_model_arg)
         if vocoder_model_value:
-            if args.vocoder_model is not None:
-                raise ValueError("Only one vocoder model can be specified")
-
+            # Overwrite if already set
             args.vocoder_model_type = vocoder_model_arg
             args.vocoder_model = vocoder_model_value
 
