@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import platform
+import shlex
 import string
 import subprocess
 import sys
@@ -128,6 +129,12 @@ def main():
     from . import load_tts_model, load_vocoder_model, text_to_speech
     from .wavfile import write as wav_write
 
+    max_thread_workers = (
+        None if args.max_thread_workers < 1 else args.max_thread_workers
+    )
+    executor = ThreadPoolExecutor(max_workers=max_thread_workers)
+
+    # Load TTS/vocoder models
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None
     if args.tts_model_type == TextToSpeechType.GLOW_TTS:
         tts_settings = {
@@ -168,6 +175,7 @@ def main():
         vocoder_model = load_vocoder_model(
             model_type=args.vocoder_model_type,
             model_path=args.vocoder_model,
+            executor=executor,
             no_optimizations=args.no_optimizations,
             denoiser_strength=args.denoiser_strength,
         )
@@ -178,23 +186,8 @@ def main():
         return vocoder_model
 
     # Load in parallel
-    max_thread_workers = (
-        None if args.max_thread_workers < 1 else args.max_thread_workers
-    )
-    executor = ThreadPoolExecutor(max_workers=max_thread_workers)
-    # start_load_time = time.perf_counter()
-
     tts_load_future = executor.submit(async_load_tts)
     vocoder_load_future = executor.submit(async_load_vocoder)
-
-    # tts_model = tts_load_future.result()
-    # vocoder_model = vocoder_load_future.result()
-
-    # end_load_time = time.perf_counter()
-
-    # _LOGGER.debug(
-    #     "Loaded TTS/vocoder models in %s second(s)", end_load_time - start_load_time
-    # )
 
     # Read text from stdin or arguments
     if args.text:
@@ -213,6 +206,7 @@ def main():
 
     all_audios: typing.List[np.ndarray] = []
     wav_data: typing.Optional[bytes] = None
+    play_command = shlex.split(args.play_command)
 
     for line in texts:
         line_id = ""
@@ -256,7 +250,7 @@ def main():
                     # Play audio
                     _LOGGER.debug("Playing audio with play command")
                     subprocess.run(
-                        ["play", "-"],
+                        play_command,
                         input=wav_data,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
@@ -432,8 +426,8 @@ def get_args():
     parser.add_argument(
         "--max-thread-workers",
         type=int,
-        default=2,
-        help="Maximum number of threads to concurrently run sentences through TTS/Vocoder",
+        default=0,
+        help="Maximum number of threads to concurrently load models and run sentences through TTS/Vocoder",
     )
 
     parser.add_argument(
@@ -445,6 +439,11 @@ def get_args():
         "--url-format",
         default=_DEFAULT_URL_FORMAT,
         help="Format string for download URLs (accepts {voice})",
+    )
+    parser.add_argument(
+        "--play-command",
+        default="play -",
+        help="Shell command used to play audio in interactive model (default: play -)",
     )
 
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")

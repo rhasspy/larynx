@@ -1,6 +1,8 @@
+"""Code for HiFi-GAN vocoder"""
+import concurrent.futures
 import logging
-import threading
 import typing
+from concurrent.futures import Executor, Future
 
 import numpy as np
 import onnxruntime
@@ -14,7 +16,7 @@ _LOGGER = logging.getLogger("hifi_gan")
 
 
 class HiFiGanVocoder(VocoderModel):
-    def __init__(self, config: VocoderModelConfig):
+    def __init__(self, config: VocoderModelConfig, executor: typing.Optional[Executor]):
         super(HiFiGanVocoder, self).__init__(config)
         self.config = config
 
@@ -37,11 +39,15 @@ class HiFiGanVocoder(VocoderModel):
         self.denoiser_strength = config.denoiser_strength
         self.bias_spec: typing.Optional[np.ndarray] = None
 
-        self.denoiser_lock = threading.RLock()
+        self.denoiser_future: typing.Optional[Future] = None
 
         if self.denoiser_strength > 0:
-            # Initialize in a separate thread
-            threading.Thread(target=self.maybe_init_denoiser, daemon=True).start()
+            if executor is not None:
+                # Run in executor
+                self.denoiser_future = executor.submit(self.maybe_init_denoiser)
+            else:
+                # Run here
+                self.maybe_init_denoiser()
 
     def mels_to_audio(
         self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
@@ -56,6 +62,11 @@ class HiFiGanVocoder(VocoderModel):
             )
 
         if denoiser_strength > 0:
+            if self.denoiser_future is not None:
+                # Denoiser init is already in progress
+                concurrent.futures.wait([self.denoiser_future])
+                self.denoiser_future = None
+
             self.maybe_init_denoiser()
             _LOGGER.debug("Running denoiser (strength=%s)", denoiser_strength)
             audio = self.denoise(audio, denoiser_strength)
@@ -74,11 +85,10 @@ class HiFiGanVocoder(VocoderModel):
         return audio_denoised
 
     def maybe_init_denoiser(self):
-        with self.denoiser_lock:
-            if self.bias_spec is None:
-                _LOGGER.debug("Initializing denoiser")
-                mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
-                bias_audio = self.generator.run(None, {"mel": mel_zeros})[0].squeeze(0)
-                bias_spec, _ = transform(bias_audio)
+        if self.bias_spec is None:
+            _LOGGER.debug("Initializing denoiser")
+            mel_zeros = np.zeros(shape=(1, self.mel_channels, 88), dtype=np.float32)
+            bias_audio = self.generator.run(None, {"mel": mel_zeros})[0].squeeze(0)
+            bias_spec, _ = transform(bias_audio)
 
-                self.bias_spec = bias_spec[:, :, 0][:, :, None]
+            self.bias_spec = bias_spec[:, :, 0][:, :, None]

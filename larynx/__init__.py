@@ -289,6 +289,7 @@ def load_vocoder_model(
     model_path: typing.Union[str, Path],
     no_optimizations: bool = False,
     denoiser_strength: float = 0.0,
+    executor: typing.Optional[Executor] = None,
 ) -> VocoderModel:
     """Load the appropriate vocoder model"""
     sess_options = onnxruntime.SessionOptions()
@@ -311,11 +312,11 @@ def load_vocoder_model(
     if model_type == VocoderType.HIFI_GAN:
         from .hifi_gan import HiFiGanVocoder
 
-        return HiFiGanVocoder(config)
+        return HiFiGanVocoder(config, executor=executor)
 
     if model_type == VocoderType.WAVEGLOW:
         from .waveglow import WaveGlowVocoder
 
-        return WaveGlowVocoder(config)
+        return WaveGlowVocoder(config, executor=executor)
 
     raise ValueError(f"Unknown vocoder model type: {model_type}")
