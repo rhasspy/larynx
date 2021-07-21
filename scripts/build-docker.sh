@@ -17,83 +17,55 @@ mkdir -p "${src_dir}/download"
 
 DOCKERFILE="${src_dir}/Dockerfile"
 
-if [[ -n "${PROXY}" ]]; then
-    if [[ -z "${PROXY_HOST}" ]]; then
-        export PROXY_HOST="$(hostname -I | awk '{print $1}')"
-    fi
-
-    : "${APT_PROXY_HOST=${PROXY_HOST}}"
-    : "${APT_PROXY_PORT=3142}"
-    : "${PYPI_PROXY_HOST=${PROXY_HOST}}"
-    : "${PYPI_PROXY_PORT=4000}"
-
-    export APT_PROXY_HOST
-    export APT_PROXY_PORT
-    export PYPI_PROXY_HOST
-    export PYPI_PROXY_PORT
-
-    echo "APT proxy: ${APT_PROXY_HOST}:${APT_PROXY_PORT}"
-    echo "PyPI proxy: ${PYPI_PROXY_HOST}:${PYPI_PROXY_PORT}"
-
-    # Use temporary file instead
-    temp_dockerfile="$(mktemp -p "${src_dir}")"
-    function cleanup {
-        rm -f "${temp_dockerfile}"
-    }
-
-    trap cleanup EXIT
-
-    # Run through pre-processor to replace variables
-    "${src_dir}/docker/preprocess.sh" < "${DOCKERFILE}" > "${temp_dockerfile}"
-    DOCKERFILE="${temp_dockerfile}"
-fi
-
 # Docker tags
 tags=()
 TAG_PREFIX="${DOCKER_REGISTRY}/rhasspy/larynx"
 
+tags+=('--tag' "${TAG_PREFIX}")
+tags+=('--tag' "${TAG_PREFIX}:${version}")
+
 # Write .dockerignore file
-DOCKERIGNORE="${src_dir}/.dockerignore"
-cp -f "${src_dir}/.dockerignore.in" "${DOCKERIGNORE}"
+# DOCKERIGNORE="${src_dir}/.dockerignore"
+# cp -f "${src_dir}/.dockerignore.in" "${DOCKERIGNORE}"
 
-if [[ -n "${LANGUAGE}" ]]; then
-    # One language (exclude en-us since it's already included)
-    if [[ ! "${LANGUAGE}" == 'en-us' ]]; then
-        echo "!gruut/${LANGUAGE}" >> "${DOCKERIGNORE}"
-    else
-        # Need one file in the directory
-        echo '!gruut/.gitkeep' >> "${DOCKERIGNORE}"
-    fi
+# if [[ -n "${LARYNX_LANGUAGE}" ]]; then
+#     # One language (exclude en-us since it's already included)
+#     if [[ ! "${LARYNX_LANGUAGE}" == 'en-us' ]]; then
+#         echo "!gruut/${LARYNX_LANGUAGE}" >> "${DOCKERIGNORE}"
+#     else
+#         # Need one file in the directory
+#         echo '!gruut/.gitkeep' >> "${DOCKERIGNORE}"
+#     fi
 
-    tags+=('--tag' "${TAG_PREFIX}:${LANGUAGE}")
-    tags+=('--tag' "${TAG_PREFIX}:${version}-${LANGUAGE}")
-else
-    # All languages
-    echo '!gruut/' >> "${DOCKERIGNORE}"
-    tags+=('--tag' "${TAG_PREFIX}")
-    tags+=('--tag' "${TAG_PREFIX}:${version}")
-fi
+#     tags+=('--tag' "${TAG_PREFIX}:${LARYNX_LANGUAGE}")
+#     tags+=('--tag' "${TAG_PREFIX}:${version}-${LARYNX_LANGUAGE}")
+# else
+#     # All languages
+#     echo '!gruut/' >> "${DOCKERIGNORE}"
+#     tags+=('--tag' "${TAG_PREFIX}")
+#     tags+=('--tag' "${TAG_PREFIX}:${version}")
+# fi
 
-if [[ -z "${VOICES}" ]]; then
-    if [[ -n "${LANGUAGE}" ]]; then
-        # All voices (one language)
-        echo "!local/${LANGUAGE}" >> "${DOCKERIGNORE}"
-    else
-        # All voices (all languages)
-        echo '!local/' >> "${DOCKERIGNORE}"
-    fi
-else
-    # Specific voices in language
-    IFS=',' read -ra voices <<< "${VOICES}"
+# if [[ -z "${VOICES}" ]]; then
+#     if [[ -n "${LARYNX_LANGUAGE}" ]]; then
+#         # All voices (one language)
+#         echo "!local/${LARYNX_LANGUAGE}" >> "${DOCKERIGNORE}"
+#     else
+#         # All voices (all languages)
+#         echo '!local/' >> "${DOCKERIGNORE}"
+#     fi
+# else
+#     # Specific voices in language
+#     IFS=',' read -ra voices <<< "${VOICES}"
 
-    # One or more voices (comma-separated)
-    for voice in "${voices[@]}"; do
-        echo "!local/${LANGUAGE}/${voice}" >> "${DOCKERIGNORE}"
-    done < <(echo "${VOICES}")
-fi
+#     # One or more voices (comma-separated)
+#     for voice in "${voices[@]}"; do
+#         echo "!local/${LARYNX_LANGUAGE}/${voice}" >> "${DOCKERIGNORE}"
+#     done < <(echo "${VOICES}")
+# fi
 
-# Exclude Waveglow for now
-echo 'local/waveglow' >> "${DOCKERIGNORE}"
+# # Exclude Waveglow for now
+# echo 'local/waveglow' >> "${DOCKERIGNORE}"
 
 if [[ -n "${NOBUILDX}" ]]; then
     # Don't use docker buildx (single platform)

@@ -49,7 +49,7 @@ COPY --from=python37 ${APP_DIR}/usr/local/include/python3.7m/ /usr/include/
 ENV PYTHON=${APP_DIR}/usr/local/bin/python3
 
 RUN --mount=type=cache,id=pip-build,target=/root/.cache/pip \
-    ${PYTHON} -m pip install --upgrade pip && \
+    ${PYTHON} -m pip install --upgrade 'pip<=20.2.4' && \
     ${PYTHON} -m pip install --upgrade wheel setuptools
 
 # Install Python packages
