@@ -200,14 +200,16 @@ def main():
         if os.isatty(sys.stdin.fileno()):
             print("Reading text from stdin...", file=sys.stderr)
 
-            if not args.output_dir:
-                # No where else for the audio to go
-                args.interactive = True
+    if os.isatty(sys.stdout.fileno()):
+        if (not args.output_dir) and (not args.stream_raw):
+            # No where else for the audio to go
+            args.interactive = True
 
     all_audios: typing.List[np.ndarray] = []
     wav_data: typing.Optional[bytes] = None
     play_command = shlex.split(args.play_command)
 
+    start_time_to_first_audio = time.perf_counter()
     for line in texts:
         line_id = ""
         line = line.strip()
@@ -237,7 +239,21 @@ def main():
         text_id = ""
 
         for text_idx, (text, audio) in enumerate(text_and_audios):
-            if args.interactive or args.output_dir:
+            if text_idx == 0:
+                end_time_to_first_audio = time.perf_counter()
+                _LOGGER.debug(
+                    "Seconds to first audio: %s",
+                    end_time_to_first_audio - start_time_to_first_audio,
+                )
+
+            if args.stream_raw:
+                _LOGGER.debug(
+                    "Writing %s byte(s) of 16-bit 22050Hz mono PCM to stdout",
+                    len(audio),
+                )
+                sys.stdout.buffer.write(audio.tobytes())
+                sys.stdout.buffer.flush()
+            elif args.interactive or args.output_dir:
                 # Convert to WAV audio
                 with io.BytesIO() as wav_io:
                     wav_write(wav_io, args.sample_rate, audio)
@@ -290,12 +306,13 @@ def main():
 
     # Write combined audio to stdout
     if all_audios:
-        _LOGGER.debug("Writing WAV audio to stdout")
         with io.BytesIO() as wav_io:
             wav_write(wav_io, args.sample_rate, np.concatenate(all_audios))
             wav_data = wav_io.getvalue()
 
+        _LOGGER.debug("Writing WAV audio to stdout")
         sys.stdout.buffer.write(wav_data)
+        sys.stdout.buffer.flush()
 
 
 # -----------------------------------------------------------------------------
@@ -345,7 +362,7 @@ def get_args():
     parser.add_argument(
         "--interactive",
         action="store_true",
-        help="Play audio after each input line (requires 'play')",
+        help="Play audio after each input line (see --play-command)",
     )
     parser.add_argument("--csv", action="store_true", help="Input format is id|text")
     parser.add_argument("--sample-rate", type=int, default=22050)
@@ -444,6 +461,11 @@ def get_args():
         "--play-command",
         default="play -",
         help="Shell command used to play audio in interactive model (default: play -)",
+    )
+    parser.add_argument(
+        "--stream-raw",
+        action="store_true",
+        help="Stream raw 16-bit 22050Hz mono PCM audio to stdout",
     )
 
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")

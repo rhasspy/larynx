@@ -12,7 +12,7 @@ Larynx's goals are:
 
 * "Good enough" synthesis to avoid using a cloud service
 * Faster than realtime performance on a Raspberry Pi 4 (with low quality vocoder)
-* Broad language support (8 languages)
+* Broad language support (9 languages)
 * Voices trained purely from public datasets
 
 ## Samples
@@ -45,6 +45,7 @@ where `<LANG>` is one of:
 * `nl` - Dutch
 * `ru-ru` - Russian
 * `sv-se` - Swedish
+* `sw` - Swahili
 
 Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi/ for HTTP endpoint documentation.
 
