@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+# Run larnyx --update to update Docker image
+
+args=()
+tag='latest'
+docker='docker'
+
+while [[ -n "$1" ]]; do
+    if [[ "$1" == '--update' ]]; then
+        # Update Docker image
+        update='1'
+    else
+        args+=("$1")
+    fi
+
+    shift 1
+done
+
+if [[ -n "${update}" ]]; then
+    docker pull "rhasspy/larynx:${tag}"
+fi
+
+"${docker}" run \
+            -i \
+            -e "HOME=${HOME}" \
+            -v "$HOME:${HOME}" \
+            -w "${PWD}" \
+            --device /dev/snd:/dev/snd \
+            --user "$(id -u):$(id -g)" \
+            --entrypoint '/app/.venv/bin/python3' \
+            "rhasspy/larynx:${tag}" \
+            -m larynx \
+            "${args[@]}"
