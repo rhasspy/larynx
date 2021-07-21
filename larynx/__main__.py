@@ -664,9 +664,13 @@ def get_args():
     setattr(args, "vocoder_model_type", vocoder_model_type)
 
     if args.quality == "medium":
-        vocoder_model_name = "vctk_medium"
-    elif args.quality == "low":
+        # This is not an error. Benchmarking reveals that the misnamed "mediaum"
+        # model is faster than "small".
         vocoder_model_name = "vctk_small"
+    elif args.quality == "low":
+        # This is not an error. Benchmarking reveals that the misnamed "mediaum"
+        # model is faster than "small".
+        vocoder_model_name = "vctk_medium"
 
     vocoder_model_dir: typing.Optional[Path] = None
     for voices_dir in voices_dirs:
