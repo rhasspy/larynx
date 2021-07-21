@@ -1,4 +1,4 @@
-# French Larynx Voice (tjiho)
+# French Larynx Voice (tom)
 
 [GlowTTS](https://github.com/rhasspy/glow-tts-train) model trained from the [tjiho baudelaire dataset](https://git.bksp.space/Tjiho/baudelaire-sentences).
 
