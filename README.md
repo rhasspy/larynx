@@ -91,7 +91,7 @@ From there, you may run the `larynx` command or `larynx-server` to start the web
 $ pip install -f 'https://synesthesiam.github.io/prebuilt-apps/' larynx
 ```
 
-For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/download/v1.0/) is available (official 64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
+For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/tag/v1.0/) is available (official 64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
 
 ### Voice/Vocoder Download
 
@@ -189,35 +189,41 @@ $ larynx --list
 
 ## Text to Speech Models
 
-* [GlowTTS](https://github.com/rhasspy/glow-tts-train) (40 voices)
-    * English (`en-us`, 21 voices)
-        * blizzard_fls (F, accent, [Blizzard](https://www.cstr.ed.ac.uk/projects/blizzard/2017/usborne_blizzard2017/license.html))
-        * cmu_aew (M, [Arctic](licenses/cmuarctic.txt))
-        * cmu_ahw (M, [Arctic](licenses/cmuarctic.txt))
-        * cmu_aup (M, accent, [Arctic](licenses/cmuarctic.txt))
-        * cmu_bdl (M, [Arctic](licenses/cmuarctic.txt))
-        * cmu_clb (F, [Arctic](licenses/cmuarctic.txt))
-        * cmu_eey (F, [Arctic](licenses/cmuarctic.txt))
-        * cmu_fem (M, [Arctic](licenses/cmuarctic.txt))
-        * cmu_jmk (M, [Arctic](licenses/cmuarctic.txt))
-        * cmu_ksp (M, accent, [Arctic](licenses/cmuarctic.txt))
-        * cmu_ljm (F, [Arctic](licenses/cmuarctic.txt))
-        * cmu_lnh (F, [Arctic](licenses/cmuarctic.txt))
-        * cmu_rms (M, [Arctic](licenses/cmuarctic.txt))
-        * cmu_rxr (M, [Arctic](licenses/cmuarctic.txt))
-        * cmu_slp (F, accent, [Arctic](licenses/cmuarctic.txt))
-        * cmu_slt (F, [Arctic](licenses/cmuarctic.txt))
+* [GlowTTS](https://github.com/rhasspy/glow-tts-train) (47 voices)
+    * English (`en-us`, 26 voices)
+        * blizzard\_fls (F, accent, [Blizzard](https://www.cstr.ed.ac.uk/projects/blizzard/2017/usborne_blizzard2017/license.html))
+        * blizzard\_lessac (F, [Blizzard](https://www.cstr.ed.ac.uk/projects/blizzard/2011/lessac_blizzard2011/license.html))
+        * cmu\_aew (M, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_ahw (M, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_aup (M, accent, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_bdl (M, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_clb (F, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_eey (F, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_fem (M, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_jmk (M, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_ksp (M, accent, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_ljm (F, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_lnh (F, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_rms (M, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_rxr (M, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_slp (F, accent, [Arctic](licenses/cmuarctic.txt))
+        * cmu\_slt (F, [Arctic](licenses/cmuarctic.txt))
         * ek (F, accent, [M-AILabs](licenses/m-ailabs.txt))
         * harvard (F, accent, [CC/Attr/NC](https://creativecommons.org/licenses/by-nc/4.0/legalcode))
         * kathleen (F, [CC0](licenses/cc0.txt))
         * ljspeech (F, [Public Domain](https://librivox.org/pages/public-domain/))
-        * mary_ann (F, [M-AILabs](licenses/m-ailabs.txt))
-    * German (`de-de`, 5 voices)
-        * thorsten (M, [CC0](licenses/cc0.txt))
-        * eva_k (F, [M-AILabs](licenses/m-ailabs.txt))
+        * mary\_ann (F, [M-AILabs](licenses/m-ailabs.txt))
+        * northern\_english\_male (M, [CC/Attr/SA](licenses/cc4asa.txt))
+        * scottish\_english\_male (M, [CC/Attr/SA](licenses/cc4asa.txt))
+        * southern\_english\_female (F, [CC/Attr/SA](licenses/cc4asa.txt))
+        * southern\_english\_male (M, [CC/Attr/SA](licenses/cc4asa.txt))
+    * German (`de-de`, 6 voices)
+        * eva\_k (F, [M-AILabs](licenses/m-ailabs.txt))
         * karlsson (M, [M-AILabs](licenses/m-ailabs.txt))
-        * rebecca\_braunert\_plunkett (F, [M-AILabs](licenses/m-ailabs.txt))
+        * kersten (F, [CC0](licenses/cc0.txt))
         * pavoque (M, [CC4/BY/NC/SA](https://github.com/marytts/pavoque-data))
+        * rebecca\_braunert\_plunkett (F, [M-AILabs](licenses/m-ailabs.txt))
+        * thorsten (M, [CC0](licenses/cc0.txt))
     * French (`fr-fr`, 3 voices)
         * gilles\_le\_blanc (M, [M-AILabs](licenses/m-ailabs.txt))
         * siwis (F, [CC/Attr](licenses/cc4a.txt))
@@ -234,18 +240,20 @@ $ larynx --list
         * riccardo_fasol (M, [Apache2](licenses/apache2.txt))
     * Swedish (`sv-se`, 1 voice)
         * talesyntese (M, [CC0](licenses/cc0.txt))
+    * Swahili (`sw`, 1 voice)
+        * blblia\_takatifu (M, [Sermon Online](https://www.sermon-online.com))
     * Russian (`ru-ru`, 3 voices)
         * hajdurova (F, [M-AILabs](licenses/m-ailabs.txt))
         * nikolaev (M, [M-AILabs](licenses/m-ailabs.txt))
         * minaev (M, [M-AILabs](licenses/m-ailabs.txt))
 * [Tacotron2](https://github.com/rhasspy/tacotron2-train)
-    * Coming soon
+    * Coming someday
 
 ## Vocoders
 
 * [Hi-Fi GAN](https://github.com/rhasspy/hifi-gan-train)
-    * Universal large
-    * VCTK "medium"
+    * Universal large (slowest)
     * VCTK "small"
+    * VCTK "medium" (fastest)
 * [WaveGlow](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/SpeechSynthesis/Tacotron2)
     * 256 channel trained on LJ Speech
