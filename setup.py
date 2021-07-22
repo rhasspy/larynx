@@ -27,6 +27,15 @@ with open(version_path, "r") as version_file:
 
 # -----------------------------------------------------------------------------
 
+data_files = [
+    str(f.relative_to(module_dir))
+    for d in ["css", "templates", "wav"]
+    for f in (module_dir / d).rglob("*")
+    if f.is_file()
+]
+
+# -----------------------------------------------------------------------------
+
 setuptools.setup(
     name="larynx",
     version=version,
@@ -35,7 +44,7 @@ setuptools.setup(
     author_email="mike@rhasspy.org",
     url="https://github.com/rhasspy/larynx",
     packages=setuptools.find_packages(),
-    package_data={"larynx": ["VERSION", "py.typed"]},
+    package_data={"larynx": data_files + ["VERSION", "VOICES", "VOCODERS", "py.typed"]},
     install_requires=requirements,
     entry_points={
         "console_scripts": [
