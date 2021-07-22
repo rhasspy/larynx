@@ -299,12 +299,20 @@
                      voicesInfo = voices
 
                      // Populate select
-                     Object.entries(voices).forEach(function(id_voice) {
+                     var indexToSelect = -1
+
+                     Object.entries(voices).forEach(function(id_voice, idx) {
                          var id = id_voice[0]
                          var name = id
 
                          if (id_voice[1].downloaded) {
                              name = '* ' + name
+
+                             if (indexToSelect < 0) {
+                                 indexToSelect = idx
+                             } else {
+                                 indexToSelect = Math.min(idx, indexToSelect)
+                             }
                          }
 
                          voiceList.insertAdjacentHTML(
@@ -312,7 +320,10 @@
                          )
                      })
 
-                     voiceChanged()
+                     if (voiceList.selectedIndex != indexToSelect) {
+                         voiceList.selectedIndex = indexToSelect
+                         voiceChanged()
+                     }
                  }).catch(function(err) {
                      q('#message').textContent = 'Error: ' + err.message
                      q('#speak-button').disabled = false
@@ -407,6 +418,7 @@
                      q('#speak-button').disabled = false
                      q('#download').hidden = true
                      q('#download').disabled = false
+                     q('#audio').url = ''
                      q('#audio').autoplay = true
                  }).catch(function(err) {
                      q('#message').textContent = 'Error: ' + err.message
