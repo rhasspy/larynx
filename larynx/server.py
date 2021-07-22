@@ -37,17 +37,36 @@ from . import (
     text_to_speech,
 )
 from .audio import AudioSettings
-from .utils import get_voices_dirs, resolve_voice_name, valid_voice_dir
+from .utils import (
+    DEFAULT_VOICE_URL_FORMAT,
+    VOCODER_DIR_NAMES,
+    VOICE_DOWNLOAD_NAMES,
+    download_voice,
+    get_voices_dirs,
+    load_voices_aliases,
+    resolve_voice_name,
+    valid_voice_dir,
+)
 from .wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
 _WAV_DIR = _DIR / "wav"
 
-# Directory names that contain vocoders instead of voices
-_VOCODER_DIR_NAMES = {"hifi_gan", "waveglow"}
-
 _LOGGER = logging.getLogger("larynx")
 _LOOP = asyncio.get_event_loop()
+
+# language -> file name
+_SAMPLE_SENTENCES = {
+    "de-de": "haben_sie_ein_vegetarisches",
+    "en-us": "it_took_me_quite_a_long_time_to_develop_a_voice",
+    "es-es": "siga_recto",
+    "fr-fr": "pourriez-vous_parler",
+    "it-it": "parli_un_altra",
+    "nl": "kunt_u_wat_langzamer_praten_alstublieft",
+    "ru-ru": "Моё_судно_на",
+    "sv-se": "den_här_damen",
+    "sw": "gari_langu_linaloangama_limejaa_na_mikunga",
+}
 
 # -----------------------------------------------------------------------------
 
@@ -93,6 +112,11 @@ parser.add_argument(
     help="Length scale (<1 is faster) used if not set in API call (default: 1.0)",
 )
 parser.add_argument(
+    "--url-format",
+    default=DEFAULT_VOICE_URL_FORMAT,
+    help="Format string for download URLs (accepts {voice})",
+)
+parser.add_argument(
     "--debug", action="store_true", help="Print DEBUG messages to console"
 )
 args = parser.parse_args()
@@ -113,6 +137,8 @@ elif args.optimizations == "auto":
         args.no_optimizations = True
 
 voices_dirs = get_voices_dirs(args.voices_dir)
+load_voices_aliases()
+
 
 # -----------------------------------------------------------------------------
 
@@ -312,34 +338,63 @@ async def text_to_wav(
     return wav_bytes
 
 
-def get_voices() -> typing.Dict[str, typing.Dict[str, str]]:
+def get_voices() -> typing.Dict[str, typing.Dict[str, typing.Any]]:
     """Get dict of voices"""
     voices = {}
 
+    # Search for downloaded voices/vocoders
     for voices_dir in voices_dirs:
         if not voices_dir.is_dir():
             continue
 
         # <LANGUAGE>/<VOICE>-<TTS_SYSTEM>
         for lang_dir in voices_dir.iterdir():
-            if (not lang_dir.is_dir()) or (lang_dir.name in _VOCODER_DIR_NAMES):
+            if (not lang_dir.is_dir()) or (lang_dir.name in VOCODER_DIR_NAMES):
                 continue
 
-            language = lang_dir.name
-
-            for voice_dir in lang_dir.iterdir():
-                if not valid_voice_dir(voice_dir):
+            # Voice
+            voice_lang = lang_dir.name
+            for voice_model_dir in lang_dir.iterdir():
+                if not valid_voice_dir(voice_model_dir):
                     continue
 
-                voice_name, tts_system = voice_dir.name.split("-", maxsplit=1)
-                voice_id = f"{language}/{voice_dir.name}"
+                full_voice_name = voice_model_dir.name
+                voice_name, tts_system = full_voice_name.split("-", maxsplit=1)
+                voice_id = f"{voice_lang}/{full_voice_name}"
 
                 voices[voice_id] = {
                     "id": voice_id,
                     "name": voice_name,
-                    "language": language,
+                    "language": voice_lang,
                     "tts_system": tts_system,
+                    "downloaded": True,
                 }
+
+    # Add voices that haven't been downloaded
+    for download_name in VOICE_DOWNLOAD_NAMES.values():
+        voice_lang, full_voice_name = download_name.split("_", maxsplit=1)
+        voice_name, tts_system = full_voice_name.split("-", maxsplit=1)
+        voice_id = f"{voice_lang}/{full_voice_name}"
+
+        if voice_id in voices:
+            # Already downloaded
+            continue
+
+        sample_sentence = _SAMPLE_SENTENCES.get(voice_lang)
+        if sample_sentence:
+            sample_url = f"https://raw.githubusercontent.com/rhasspy/larynx/master/local/{voice_lang}/{full_voice_name}/samples/{sample_sentence}.wav"
+        else:
+            # No sample
+            sample_url = ""
+
+        voices[voice_id] = {
+            "id": voice_id,
+            "name": voice_name,
+            "language": voice_lang,
+            "tts_system": tts_system,
+            "downloaded": False,
+            "sample_url": sample_url,
+        }
 
     return voices
 
@@ -367,7 +422,7 @@ async def app_vocoders() -> Response:
         # <VOCODER_SYSTEM>/<VOCODER_MODEL>
         for vocoder_dir in voices_dir.iterdir():
             if (not vocoder_dir.is_dir()) or (
-                vocoder_dir.name not in _VOCODER_DIR_NAMES
+                vocoder_dir.name not in VOCODER_DIR_NAMES
             ):
                 continue
 
@@ -518,6 +573,24 @@ async def api_word_phonemes():
     pron_phonemes = [prons]
 
     return jsonify(pron_phonemes)
+
+
+@app.route("/api/download", methods=["GET"])
+async def api_download():
+    """Download voice"""
+    voice_id = request.args.get("id", "")
+    if "/" in voice_id:
+        voice_name = voice_id.split("/", maxsplit=1)[1]
+    else:
+        voice_name = voice_id
+
+    download_name = VOICE_DOWNLOAD_NAMES.get(voice_name)
+    assert download_name, f"No download known for {voice_name}"
+
+    url = args.url_format.format(voice=download_name)
+    tts_model_dir = download_voice(voice_name, voices_dirs[0], url)
+
+    return jsonify({"id": voice_id, "url": url, "dir": str(tts_model_dir)})
 
 
 # -----------------------------------------------------------------------------

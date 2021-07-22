@@ -6,9 +6,20 @@ import tempfile
 import typing
 from pathlib import Path
 
+from .constants import VocoderType
+
 _DIR = Path(__file__).parent
 _LOGGER = logging.getLogger("larynx.utils")
 _ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
+
+# Format string for downloading voices
+DEFAULT_VOICE_URL_FORMAT = (
+    "http://github.com/rhasspy/larynx/releases/download/2021-03-28/{voice}.tar.gz"
+)
+
+# Directory names that contain vocoders instead of voices
+VOCODER_DIR_NAMES = set(v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM)
+
 
 # alias -> full name
 VOICE_ALIASES: typing.Dict[str, str] = {}

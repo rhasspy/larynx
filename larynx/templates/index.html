@@ -28,17 +28,14 @@
     </head>
 
     <body>
-        <a href="https://github.com/rhasspy/larynx"><img style="position: absolute; z-index:1000; top: 0; left: 0; border: 0;" src="img/forkme_left_darkblue_121621.png" alt="Fork me on GitHub"></a>
-
         <!-- Page Content -->
         <div class="container">
-            <div class="row">
+            <div class="row mt-1">
                 <div class="col-lg-12 text-center">
-                    <img class="mt-5" src="img/logo.png" alt=></img>
-                    <h1 class="mt-3 mb-3">Larynx</h1>
+                    <h1>Larynx</h1>
                 </div>
             </div>
-            <div class="row">
+            <div class="row mt-3">
                 <div class="col">
                     <textarea id="text" placeholder="Type here..." class="form-control" rows="3" name="text"></textarea>
                 </div>
@@ -53,7 +50,7 @@
                     <select id="voice-list" name="voices">
                     </select>
                 </div>
-                <div class="col">
+                <div class="col-auto">
                     <select id="vocoder-list" name="vocoders">
                         <!-- <option value="waveglow/wn_256">Best Quality</option> -->
                         <option value="hifi_gan/universal_large" selected>High Quality</option>
@@ -62,34 +59,48 @@
                     </select>
                 </div>
                 <div class="col-auto">
-                    <label for="denoiser-strength" class="ml-2" title="Denoiser strength (0 to disable)">Denoiser:</label>
-                    <input type="number" id="denoiser-strength" name="denoiser" size="5" min="0" max="1" step="0.001" value="0.002">
-                    <label for="noise-scale" class="ml-2" title="Voice volatility">Noise:</label>
-                    <input type="number" id="noise-scale" name="noiseScale" size="5" min="0" max="1" step="0.001" value="0.333">
-                    <label for="length-scale" class="ml-2" title="Voice speed (< 1 is faster)">Length:</label>
-                    <input type="number" id="length-scale" name="lengthScale" size="5" min="0" step="0.001" value="1">
+                    <button id="download" class="btn btn-sm btn-success" title="Download more voices" hidden>Download</button>
                 </div>
             </div>
-            <div class="row mt-2">
+            <div id="audio-message" class="row mt-3" hidden>
                 <div class="col">
-                    <input type="text" id="phonemes-word" placeholder="word">
-                    <button class="btn btn-secondary ml-2" id="get-phonemes" title="Get phonetic pronunciation for word">Get Phonemes</button>
-                    <span id="word-phonemes" class="ml-3"></span>
-                    <select id="word-phonemes-index" class="ml-2" hidden></select>
+                    <audio id="audio" preload="none" controls autoplay hidden></audio>
+                    <p id="message"></p>
                 </div>
-                <div class="col-auto">
-                    <input type="checkbox" id="inline-pronunciations" checked>
-                    <label for="inline-pronunciations" class="col-form-label" title="Phonemes inside [[ brackets ]] are spoken literally. Words/segments in {% raw %}{{ cur{ly} braces }}{% endraw %} are combined">Enable <tt>[[phonemes]] or {% raw %}{{w{or}ds}}{% endraw %}</tt></label>
+            </div>
+            <div id="more-settings" hidden>
+                <div class="row mt-3">
+                    <div class="col-auto">
+                        <label for="denoiser-strength" title="Denoiser strength (0 to disable)">Denoiser:</label>
+                        <input type="number" id="denoiser-strength" name="denoiser" size="5" min="0" max="1" step="0.001" value="0.002">
+                        <label for="noise-scale" class="ml-2" title="Voice volatility">Noise:</label>
+                        <input type="number" id="noise-scale" name="noiseScale" size="5" min="0" max="1" step="0.001" value="0.333">
+                        <label for="length-scale" class="ml-2" title="Voice speed (< 1 is faster)">Length:</label>
+                        <input type="number" id="length-scale" name="lengthScale" size="5" min="0" step="0.001" value="1">
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-auto">
+                        <input type="checkbox" id="inline-pronunciations" checked>
+                        <label for="inline-pronunciations" class="col-form-label" title="Phonemes inside [[ brackets ]] are spoken literally. Words/segments in {% raw %}{{ cur{ly} braces }}{% endraw %} are combined">Enable inline <tt>[[phonemes]] or {% raw %}{{w{or}ds}}{% endraw %}</tt></label>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col">
+                        <input type="text" id="phonemes-word" placeholder="word">
+                        <button class="btn btn-secondary ml-2" id="get-phonemes" title="Get phonetic pronunciation for word">Get Phonemes</button>
+                        <span id="word-phonemes" class="ml-3"></span>
+                        <select id="word-phonemes-index" class="ml-2" hidden></select>
+                    </div>
                 </div>
             </div>
             <div class="row mt-3">
                 <div class="col">
-                    <audio id="audio" controls autoplay hidden></audio>
-                    <p id="message"></p>
+                    <a id="more-settings-link" href="javascript:showHideSettings()">More &#9207;</a>
                 </div>
             </div>
 
-            <div class="row mb-3">
+            <div class="row mt-3 mb-3">
                 <div class="col text-center">
                     <table id="phoneme-table" class="table table-striped">
                         <thead>
@@ -113,6 +124,7 @@
         <!-- Bootstrap core JavaScript -->
         <script>
          var lastPhonemeLanguage = ''
+         var voicesInfo = {}
 
          function q(selector) {return document.querySelector(selector)}
          q('#text').focus()
@@ -149,6 +161,8 @@
              var noiseScale = q('#noise-scale').value || '0.333'
              var lengthScale = q('#length-scale').value || '1.0'
              var inlinePronunciations = q('#inline-pronunciations').checked ? 'true' : 'false'
+
+             q('#audio-message').hidden = false
 
              var startTime = performance.now()
 
@@ -224,9 +238,33 @@
              }
          })
 
-         q('#voice-list').addEventListener('change', function() {
+         function voiceChanged() {
+             var voiceList = q('#voice-list')
+             var info = voicesInfo[voiceList.options[voiceList.selectedIndex].value]
+
+             q('#speak-button').disabled = !info.downloaded
+             q('#download').hidden = info.downloaded
+             q('#download').disabled = false
+
+             // Reset audio
+             q('#audio-message').hidden = true
+             q('#message').textContent = ''
+             q('#audio').hidden = true
+             q('#audio').autoplay = true
+
+             if ((!info.downloaded) && (info.sample_url.length > 0)) {
+                 // Show sample audio
+                 q('#audio-message').hidden = false
+                 q('#message').textContent = 'Sample'
+                 q('#audio').hidden = false
+                 q('#audio').autoplay = false
+                 q('#audio').src = info.sample_url
+             }
+
              loadPhonemes()
-         })
+         }
+
+         q('#voice-list').addEventListener('change', voiceChanged)
 
          q('#word-phonemes-index').addEventListener('change', function() {
              var wordPhonemesIndex = q('#word-phonemes-index')
@@ -235,6 +273,9 @@
          })
 
          function loadVoices() {
+             voicesInfo = {}
+             q('#download').hidden = true
+
              // Remove previous voices
              var voiceList = q('#voice-list')
              for (var i = voiceList.options.length - 1; i >= 0; i--) {
@@ -246,14 +287,23 @@
                      if (!res.ok) throw Error(res.statusText)
                      return res.json()
                  }).then(function(voices) {
+                     voicesInfo = voices
+
+                     // Populate select
                      Object.entries(voices).forEach(function(id_voice) {
                          var id = id_voice[0]
+                         var name = id
+
+                         if (id_voice[1].downloaded) {
+                             name = '* ' + name
+                         }
+
                          voiceList.insertAdjacentHTML(
-                             'beforeend', '<option value="' + id + '">' + id + '</option>'
+                             'beforeend', '<option value="' + id + '">' + name + '</option>'
                          )
                      })
 
-                     loadPhonemes()
+                     voiceChanged()
                  }).catch(function(err) {
                      q('#message').textContent = 'Error: ' + err.message
                      q('#speak-button').disabled = false
@@ -309,6 +359,50 @@
                      q('#speak-button').disabled = false
                  })
          }
+
+         function showHideSettings() {
+             var moreSettings = q('#more-settings')
+
+             if (moreSettings.hidden) {
+                 // Show
+                 moreSettings.hidden = false
+                 q('#more-settings-link').innerHTML = 'Less &#9206;'
+             } else {
+                 // Hide
+                 moreSettings.hidden = true
+                 q('#more-settings-link').innerHTML = 'More &#9207;'
+             }
+         }
+
+         q('#download').addEventListener('click', function() {
+             var voiceList = q('#voice-list')
+             var info = voicesInfo[voiceList.options[voiceList.selectedIndex].value]
+
+             if (info.downloaded) {
+                 return
+             }
+
+             q('#audio-message').hidden = false
+             q('#download').disabled = true
+             q('#message').textContent = 'Downloading ' + info.id
+
+             fetch('api/download?id=' + encodeURIComponent(info.id))
+                 .then(function(res) {
+                     if (!res.ok) throw Error(res.statusText)
+                     return res.json()
+                 }).then(function() {
+                     // Set UI to downloaded state
+                     info.downloaded = true
+                     voiceList.options[voiceList.selectedIndex].text = '* ' + info.id
+                     q('#speak-button').disabled = false
+                     q('#download').hidden = true
+                     q('#download').disabled = false
+                 }).catch(function(err) {
+                     q('#message').textContent = 'Error: ' + err.message
+                     q('#download').disabled = false
+                 })
+
+         })
 
          window.addEventListener('load', function() {
              loadVoices()

@@ -17,6 +17,8 @@ from pathlib import Path
 
 from .constants import TextToSpeechType, VocoderType
 from .utils import (
+    DEFAULT_VOICE_URL_FORMAT,
+    VOCODER_DIR_NAMES,
     download_voice,
     get_voice_download_name,
     get_voices_dirs,
@@ -25,9 +27,6 @@ from .utils import (
 )
 
 _DIR = Path(__file__).parent
-_DEFAULT_URL_FORMAT = (
-    "http://github.com/rhasspy/larynx/releases/download/2021-03-28/{voice}.tar.gz"
-)
 
 _LOGGER = logging.getLogger("larynx")
 
@@ -201,7 +200,7 @@ def main():
             print("Reading text from stdin...", file=sys.stderr)
 
     if os.isatty(sys.stdout.fileno()):
-        if (not args.output_dir) and (not args.stream_raw):
+        if (not args.output_dir) and (not args.raw_stream):
             # No where else for the audio to go
             args.interactive = True
 
@@ -246,7 +245,7 @@ def main():
                     end_time_to_first_audio - start_time_to_first_audio,
                 )
 
-            if args.stream_raw:
+            if args.raw_stream:
                 _LOGGER.debug(
                     "Writing %s byte(s) of 16-bit 22050Hz mono PCM to stdout",
                     len(audio),
@@ -454,7 +453,7 @@ def get_args():
     )
     parser.add_argument(
         "--url-format",
-        default=_DEFAULT_URL_FORMAT,
+        default=DEFAULT_VOICE_URL_FORMAT,
         help="Format string for download URLs (accepts {voice})",
     )
     parser.add_argument(
@@ -463,7 +462,7 @@ def get_args():
         help="Shell command used to play audio in interactive model (default: play -)",
     )
     parser.add_argument(
-        "--stream-raw",
+        "--raw-stream",
         action="store_true",
         help="Stream raw 16-bit 22050Hz mono PCM audio to stdout",
     )
@@ -496,10 +495,6 @@ def get_args():
 
     def list_voices_vocoders():
         """Print all vocoders and voices"""
-        vocoder_model_types = set(
-            v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM
-        )
-
         # (type, name) -> location
         local_info = {}
 
@@ -512,7 +507,7 @@ def get_args():
                 if not voice_dir.is_dir():
                     continue
 
-                if voice_dir.name in vocoder_model_types:
+                if voice_dir.name in VOCODER_DIR_NAMES:
                     # Vocoder
                     for vocoder_model_dir in voice_dir.iterdir():
                         if not vocoder_model_dir.is_dir():
