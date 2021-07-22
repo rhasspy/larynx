@@ -19,6 +19,12 @@ Larynx's goals are:
 * Broad language support (9 languages)
 * Voices trained purely from public datasets
 
+You can use Larynx to:
+
+* Host a [text to speech HTTP endpoint](#docker-installation)
+* Synthesize text [on the command-line](#basic-synthesis)
+* [Read a book](#long-texts) to you
+
 ## Samples
 
 [Listen to voice samples](https://rhasspy.github.io/larynx/) from all of the [pre-trained models](https://github.com/rhasspy/larynx/releases).
@@ -149,6 +155,42 @@ Hello world!<ENTER>
 ```
 
 Use `CTRL+D` or `CTRL+C` to exit.
+
+### Inline Pronunciations
+
+If you want more control over a word's pronunciation, you can enable inline pronunciations in your sentences with the `--inline` flag. There are two different syntaxes, with different purposes:
+
+* Brackets - `[[ p h o n e m e s ]]`
+* Curly Braces - `{{ words with s{eg}m{ent}s }}`
+
+The "brackets" syntax allows you to directly insert phonemes for a word. See [gruut-ipa](https://github.com/rhasspy/gruut-ipa) for the list of phonemes in your desired language. Some substitutions are automatically made for you:
+
+1. Primary and secondary stress can be given with the apostrophe (`'`) and comma (`,`)
+2. Elongation can be given with a colon (`:`)
+3. Ties will be added, if necessary (e.g., `tʃ` becomes `t͡ʃ`)
+
+The "curly brackets" syntax lets you sound out a word using other words (or segments of other words). For example, "Beyoncé" could be written as directly with phonemes as `[[ b ˈi j ˈɔ n s ˈeɪ ]]`. A more natural way, however, is to use a combination of words: `{{ bee yawn say }}`. From the curly brackets, Larynx will look up each word's pronunciation in the lexicon (or guess it), and combine all of the resulting phonemes. You may include phonemes inside the curly brackets as well with the syntax `/p h o n e m e s/` alongside other words.
+
+An even more useful aspect of the "curly brackets" syntax is using **word segments**. For most words in its lexicons, Larynx has an alignment between its graphemes and phonemes. This enables you do insert *partial* pronunciations of words, such as the "zure" in "azure", with `a{zure}`. You can even have multiple segments from a single word! For example, `{{ {mic}roph{one} }}` will produce phonemes sounding like "mike own".
+
+Phonemes example:
+
+```sh
+larynx -v en --inline "[[ b ˈi j ˈɔ n s ˈeɪ ]]"
+```
+
+Words example:
+
+```sh
+larynx -v en --inline '{{ bee yawn say }}'
+```
+
+Multiple word segements [example](https://tardis.fandom.com/wiki/Raxacoricofallapatorius):
+
+```sh
+# raxacoricofallipatorius
+larynx -v en --inline '{{ racks uh core {i}t {co}de {fall}{i}ble {pu}n tore s{ee} us }}'
+```
 
 ### GlowTTS Settings
 
