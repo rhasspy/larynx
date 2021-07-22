@@ -9,11 +9,13 @@ import shlex
 import string
 import subprocess
 import sys
+import threading
 import time
 import typing
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
+from queue import Queue
 
 from .constants import TextToSpeechType, VocoderType
 from .utils import (
@@ -128,9 +130,16 @@ def main():
     from . import load_tts_model, load_vocoder_model, text_to_speech
     from .wavfile import write as wav_write
 
-    max_thread_workers = (
-        None if args.max_thread_workers < 1 else args.max_thread_workers
-    )
+    max_thread_workers: typing.Optional[int] = None
+
+    if args.max_thread_workers is not None:
+        max_thread_workers = (
+            None if args.max_thread_workers < 1 else args.max_thread_workers
+        )
+    elif args.raw_stream:
+        # Faster time to first audio
+        max_thread_workers = 2
+
     executor = ThreadPoolExecutor(max_workers=max_thread_workers)
 
     # Load TTS/vocoder models
@@ -199,15 +208,58 @@ def main():
         if os.isatty(sys.stdin.fileno()):
             print("Reading text from stdin...", file=sys.stderr)
 
+    if args.process_on_blank_line:
+
+        # Combine text until a blank line is encountered.
+        # Good for line-wrapped books where
+        # sentences are broken
+        # up across multiple
+        # lines.
+        def process_on_blank_line(lines):
+            text = ""
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    if text:
+                        yield text
+
+                    text = ""
+                    continue
+
+                text += " " + line
+
+        texts = process_on_blank_line(texts)
+
     if os.isatty(sys.stdout.fileno()):
         if (not args.output_dir) and (not args.raw_stream):
             # No where else for the audio to go
             args.interactive = True
 
+    # Raw stream queue
+    raw_queue: typing.Optional["Queue[bytes]"] = None
+    if args.raw_stream:
+        # Output in a separate thread to avoid blocking audio processing
+        raw_queue = Queue(maxsize=args.raw_stream_queue_size)
+
+        def output_raw_stream():
+            while True:
+                audio = raw_queue.get()
+                _LOGGER.debug(
+                    "Writing %s byte(s) of 16-bit 22050Hz mono PCM to stdout",
+                    len(audio),
+                )
+                sys.stdout.buffer.write(audio)
+                sys.stdout.buffer.flush()
+
+        threading.Thread(target=output_raw_stream, daemon=True).start()
+
     all_audios: typing.List[np.ndarray] = []
     wav_data: typing.Optional[bytes] = None
     play_command = shlex.split(args.play_command)
 
+    # -------------------
+    # Process input lines
+    # -------------------
     start_time_to_first_audio = time.perf_counter()
     for line in texts:
         line_id = ""
@@ -216,6 +268,7 @@ def main():
             continue
 
         if args.output_naming == OutputNaming.ID:
+            # Line has the format id|text instead of just text
             line_id, line = line.split(args.id_delimiter, maxsplit=1)
 
         text_and_audios = text_to_speech(
@@ -246,12 +299,8 @@ def main():
                 )
 
             if args.raw_stream:
-                _LOGGER.debug(
-                    "Writing %s byte(s) of 16-bit 22050Hz mono PCM to stdout",
-                    len(audio),
-                )
-                sys.stdout.buffer.write(audio.tobytes())
-                sys.stdout.buffer.flush()
+                assert raw_queue is not None
+                raw_queue.put(audio.tobytes())
             elif args.interactive or args.output_dir:
                 # Convert to WAV audio
                 with io.BytesIO() as wav_io:
@@ -442,7 +491,6 @@ def get_args():
     parser.add_argument(
         "--max-thread-workers",
         type=int,
-        default=0,
         help="Maximum number of threads to concurrently load models and run sentences through TTS/Vocoder",
     )
 
@@ -465,6 +513,16 @@ def get_args():
         "--raw-stream",
         action="store_true",
         help="Stream raw 16-bit 22050Hz mono PCM audio to stdout",
+    )
+    parser.add_argument(
+        "--raw-stream-queue-size",
+        default=10,
+        help="Maximum number of sentences to maintain in output queue with --raw-stream (default: 10)",
+    )
+    parser.add_argument(
+        "--process-on-blank-line",
+        action="store_true",
+        help="Process text only after encountering a blank line",
     )
 
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
