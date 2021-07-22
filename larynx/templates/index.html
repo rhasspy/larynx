@@ -17,6 +17,7 @@
         <style>
          body {
              padding-top: 0;
+             background-color: #111;
          }
          @media (min-width: 992px) {
              body {
@@ -24,10 +25,14 @@
              }
          }
 
+         audio {
+             border: 1px solid #AAA;
+         }
+
         </style>
     </head>
 
-    <body>
+    <body class="text-light">
         <!-- Page Content -->
         <div class="container">
             <div class="row mt-1">
@@ -93,30 +98,34 @@
                         <select id="word-phonemes-index" class="ml-2" hidden></select>
                     </div>
                 </div>
+                <div class="row mt-3">
+                    <div class="col">
+                        <a href="javascript:showHideSettings()">Less &#9206;</a>
+                    </div>
+                </div>
+                <div class="row mt-3 mb-3">
+                    <div class="col text-center">
+                        <table id="phoneme-table" class="table">
+                            <thead>
+                                <th>
+                                    <a href="https://en.wikipedia.org/wiki/International_Phonetic_Alphabet">IPA</a>
+                                </th>
+                                <th>Example</th>
+                                <th>Audio</th>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                        <br>
+                        <div class="text-muted">
+                            Phonemes sounds from <a href="https://www.ipachart.com/" target="_blank" title="IPA chart with sounds">IPA chart</a>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="row mt-3">
                 <div class="col">
                     <a id="more-settings-link" href="javascript:showHideSettings()">More &#9207;</a>
-                </div>
-            </div>
-
-            <div class="row mt-3 mb-3">
-                <div class="col text-center">
-                    <table id="phoneme-table" class="table table-striped">
-                        <thead>
-                            <th>
-                                <a href="https://en.wikipedia.org/wiki/International_Phonetic_Alphabet">IPA</a>
-                            </th>
-                            <th>Example</th>
-                            <th>Audio</th>
-                        </thead>
-                        <tbody>
-                        </tbody>
-                    </table>
-                    <br>
-                    <div class="text-muted">
-                        Phonemes sounds from <a href="https://www.ipachart.com/" target="_blank" title="IPA chart with sounds">IPA chart</a>
-                    </div>
                 </div>
             </div>
         </div>
@@ -362,15 +371,16 @@
 
          function showHideSettings() {
              var moreSettings = q('#more-settings')
+             var moreSettingsLink = q('#more-settings-link')
 
              if (moreSettings.hidden) {
                  // Show
                  moreSettings.hidden = false
-                 q('#more-settings-link').innerHTML = 'Less &#9206;'
+                 moreSettingsLink.hidden = true
              } else {
                  // Hide
                  moreSettings.hidden = true
-                 q('#more-settings-link').innerHTML = 'More &#9207;'
+                 moreSettingsLink.hidden = false
              }
          }
 

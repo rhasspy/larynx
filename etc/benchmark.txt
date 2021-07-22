@@ -1,0 +1,64 @@
+x86_64 (Core i7-8750H)
+======================
+
+High Quality:
+-------------
+Avg. mels: 1166.6287081785579  phonemes/sec
+Avg. vocoder: 85.42505339034419  phonemes/sec
+Avg. RTF: 0.24956521739130433 infer/audio
+
+Medium Quality:
+---------------
+Avg. mels: 1434.8804046856135  phonemes/sec
+Avg. vocoder: 464.2296102084378  phonemes/sec
+Avg. RTF: 0.05543478260869551 infer/audio
+
+Low Quality:
+------------
+Avg. mels: 1447.07368789601  phonemes/sec
+Avg. vocoder: 553.7641184982164  phonemes/sec
+Avg. RTF: 0.051884057971014384 infer/audio
+
+
+aarch64 (Rpi 4)
+===============
+
+High Quality:
+-------------
+Avg. mels: 53.14276486146264  phonemes/sec
+Avg. vocoder: 4.264289940614102  phonemes/sec
+Avg. RTF: 4.283333333333334 infer/audio
+
+Medium Quality:
+---------------
+Avg. mels: 78.1850260517729  phonemes/sec
+Avg. vocoder: 29.740845760819525  phonemes/sec
+Avg. RTF: 1.818888888888889 infer/audio
+
+Low Quality:
+------------
+Avg. mels: 90.42650033643399  phonemes/sec
+Avg. vocoder: 45.099398058850106  phonemes/sec
+Avg. RTF: 0.5633333333333334 infer/audio
+
+
+armv7l (Rpi 3)
+==============
+
+High Quality:
+-------------
+Avg. mels: 13.712127179368261  phonemes/sec
+Avg. vocoder: 1.0828078937079373  phonemes/sec
+Avg. RTF: 16.833333333333332 infer/audio
+
+Medium Quality:
+---------------
+Avg. mels: 21.337021571783566  phonemes/sec
+Avg. vocoder: 7.20154129604584  phonemes/sec
+Avg. RTF: 7.162222222222222 infer/audio
+
+Low Quality:
+------------
+Avg. mels: 25.072039097773413  phonemes/sec
+Avg. vocoder: 10.9602960461971  phonemes/sec
+Avg. RTF: 2.216666666666667 infer/audio
