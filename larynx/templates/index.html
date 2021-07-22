@@ -407,6 +407,7 @@
                      q('#speak-button').disabled = false
                      q('#download').hidden = true
                      q('#download').disabled = false
+                     q('#audio').autoplay = true
                  }).catch(function(err) {
                      q('#message').textContent = 'Error: ' + err.message
                      q('#download').disabled = false

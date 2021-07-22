@@ -176,20 +176,20 @@ An even more useful aspect of the "curly brackets" syntax is using **word segmen
 Phonemes example:
 
 ```sh
-larynx -v en --inline "[[ b ˈi j ˈɔ n s ˈeɪ ]]"
+larynx -v en --inline "[[ b ˈi j ˈɔ n s ˈeɪ ]]" | aplay
 ```
 
 Words example:
 
 ```sh
-larynx -v en --inline '{{ bee yawn say }}'
+larynx -v en --inline '{{ bee yawn say }}' | aplay
 ```
 
 Multiple word segements [example](https://tardis.fandom.com/wiki/Raxacoricofallapatorius):
 
 ```sh
 # raxacoricofallipatorius
-larynx -v en --inline '{{ racks uh core {i}t {co}de {fall}{i}ble {pu}n tore s{ee} us }}'
+larynx -v en --inline '{{ racks uh core {i}t {co}de {fall}{i}ble {pu}n tore s{ee} us }}' | aplay
 ```
 
 ### GlowTTS Settings
