@@ -2,6 +2,7 @@
 """Larynx web server"""
 import argparse
 import asyncio
+import contextlib
 import functools
 import io
 import json
@@ -18,6 +19,7 @@ import gruut
 import gruut_ipa
 import hypercorn
 import numpy as np
+import pidfile
 import quart_cors
 from quart import (
     Quart,
@@ -117,15 +119,26 @@ parser.add_argument(
     help="Format string for download URLs (accepts {voice})",
 )
 parser.add_argument(
+    "--pidfile", help="Path to pidfile. Exit if pidfile already exists."
+)
+parser.add_argument("--logfile", help="Path to logging file (default: stderr)")
+parser.add_argument(
     "--debug", action="store_true", help="Print DEBUG messages to console"
 )
 args = parser.parse_args()
 
-if args.debug:
-    logging.basicConfig(level=logging.DEBUG)
-else:
-    logging.basicConfig(level=logging.INFO)
+# Set up logging
+log_args = {}
 
+if args.debug:
+    log_args["level"] = logging.DEBUG
+else:
+    log_args["level"] = logging.INFO
+
+if args.logfile:
+    log_args["filename"] = args.logfile
+
+logging.basicConfig(**log_args)  # type: ignore
 _LOGGER.debug(args)
 
 setattr(args, "no_optimizations", False)
@@ -699,13 +712,27 @@ def _signal_handler(*_: typing.Any) -> None:
 _LOOP.add_signal_handler(signal.SIGTERM, _signal_handler)
 
 try:
-    # Need to type cast to satisfy mypy
-    shutdown_trigger = typing.cast(
-        typing.Callable[..., typing.Awaitable[None]], shutdown_event.wait
-    )
+    if args.pidfile:
+        # Create directory to pidfile
+        Path(args.pidfile).parent.mkdir(parents=True, exist_ok=True)
+        ctx_pid = pidfile.PIDFile(args.pidfile)
+    else:
+        # No pidfile
+        ctx_pid = contextlib.nullcontext()
 
-    _LOOP.run_until_complete(
-        hypercorn.asyncio.serve(app, hyp_config, shutdown_trigger=shutdown_trigger)
-    )
+    with ctx_pid:
+        if args.pidfile:
+            _LOGGER.debug("pidfile: %s", args.pidfile)
+
+        # Need to type cast to satisfy mypy
+        shutdown_trigger = typing.cast(
+            typing.Callable[..., typing.Awaitable[None]], shutdown_event.wait
+        )
+
+        _LOOP.run_until_complete(
+            hypercorn.asyncio.serve(app, hyp_config, shutdown_trigger=shutdown_trigger)
+        )
 except KeyboardInterrupt:
     _LOOP.call_soon(shutdown_event.set)
+except pidfile.AlreadyRunningError:
+    _LOGGER.info("Daemon already running (pidfile=%s). Exiting now.", args.pidfile)

@@ -12,6 +12,8 @@ import sys
 import threading
 import time
 import typing
+import urllib.parse
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
@@ -22,6 +24,7 @@ from .utils import (
     DEFAULT_VOICE_URL_FORMAT,
     VOCODER_DIR_NAMES,
     download_voice,
+    get_runtime_dir,
     get_voice_download_name,
     get_voices_dirs,
     resolve_voice_name,
@@ -126,6 +129,106 @@ def main():
         phoneme_transform = phoneme_map_transform
 
     # -------------------------------------------------------------------------
+    # Daemon
+    # -------------------------------------------------------------------------
+
+    if args.daemon:
+        runtime_dir = get_runtime_dir()
+        pidfile_path = runtime_dir / "daemon.pidfile"
+        _LOGGER.debug("Trying to start daemon on port %s", args.daemon_port)
+
+        daemon_cmd = [
+            "python3",
+            "-m",
+            "larynx.server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(args.daemon_port),
+            "--pidfile",
+            str(pidfile_path),
+            "--logfile",
+            str(runtime_dir / "daemon.log"),
+        ]
+
+        _LOGGER.debug(daemon_cmd)
+        subprocess.Popen(
+            daemon_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+        _LOGGER.debug("Waiting for daemon to start...")
+        while (not pidfile_path.is_file()) or (pidfile_path.stat().st_size == 0):
+            time.sleep(0.1)
+
+        daemon_pid = int(pidfile_path.read_text().strip())
+        _LOGGER.info("Daemon running (pid=%s)", daemon_pid)
+
+        if args.text:
+            text = " ".join(args.text)
+        else:
+            text = sys.stdin.read().encode()
+
+        vocoder = f"{args.vocoder_model_type}/{args.vocoder_model}"
+        values = {"voice": args.voice, "text": text, "vocoder": vocoder}
+        url = f"http://localhost:{args.daemon_port}/api/tts?" + urllib.parse.urlencode(
+            values
+        )
+
+        _LOGGER.debug(url)
+
+        start_time = time.perf_counter()
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            wav_data = response.read()
+            end_time = time.perf_counter()
+            _LOGGER.debug(
+                "Got %s byte(s) of WAV data in %s second(s)",
+                len(wav_data),
+                end_time - start_time,
+            )
+            sys.stdout.buffer.write(wav_data)
+            sys.stdout.flush()
+
+        return
+
+    # -------------------------------------------------------------------------
+    # No Daemon
+    # -------------------------------------------------------------------------
+
+    # Read text from stdin or arguments
+    if args.text:
+        # Use arguments
+        texts = args.text
+    else:
+        # Use stdin
+        texts = sys.stdin
+
+        if os.isatty(sys.stdin.fileno()):
+            print("Reading text from stdin...", file=sys.stderr)
+
+    if args.process_on_blank_line:
+
+        # Combine text until a blank line is encountered.
+        # Good for line-wrapped books where
+        # sentences are broken
+        # up across multiple
+        # lines.
+        def process_on_blank_line(lines):
+            text = ""
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    if text:
+                        yield text
+
+                    text = ""
+                    continue
+
+                text += " " + line
+
+        texts = process_on_blank_line(texts)
+
+    # -------------------------------------------------------------------------
 
     from . import load_tts_model, load_vocoder_model, text_to_speech
     from .wavfile import write as wav_write
@@ -196,39 +299,6 @@ def main():
     # Load in parallel
     tts_load_future = executor.submit(async_load_tts)
     vocoder_load_future = executor.submit(async_load_vocoder)
-
-    # Read text from stdin or arguments
-    if args.text:
-        # Use arguments
-        texts = args.text
-    else:
-        # Use stdin
-        texts = sys.stdin
-
-        if os.isatty(sys.stdin.fileno()):
-            print("Reading text from stdin...", file=sys.stderr)
-
-    if args.process_on_blank_line:
-
-        # Combine text until a blank line is encountered.
-        # Good for line-wrapped books where
-        # sentences are broken
-        # up across multiple
-        # lines.
-        def process_on_blank_line(lines):
-            text = ""
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    if text:
-                        yield text
-
-                    text = ""
-                    continue
-
-                text += " " + line
-
-        texts = process_on_blank_line(texts)
 
     if os.isatty(sys.stdout.fileno()):
         if (not args.output_dir) and (not args.raw_stream):
@@ -524,6 +594,22 @@ def get_args():
         action="store_true",
         help="Process text only after encountering a blank line",
     )
+    parser.add_argument(
+        "--daemon",
+        action="store_true",
+        help="Connect to or run a background HTTP server for TTS functionality",
+    )
+    parser.add_argument(
+        "--daemon-port",
+        type=int,
+        default=15002,
+        help="Port to run daemon HTTP server on (default: 15002)",
+    )
+    parser.add_argument(
+        "--stop-daemon",
+        action="store_true",
+        help="Try to stop the currently running Larynx daemon and exit",
+    )
 
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
@@ -544,6 +630,27 @@ def get_args():
         from . import __version__
 
         print(__version__)
+        sys.exit(0)
+
+    if args.stop_daemon:
+        # Try to stop daemon and exit
+        import psutil
+
+        runtime_dir = get_runtime_dir()
+        pidfile = runtime_dir / "daemon.pidfile"
+        if pidfile.is_file():
+            # Get pid from file and block until terminated
+            daemon_pid = int(pidfile.read_text().strip())
+            proc = psutil.Process(daemon_pid)
+            if proc.is_running():
+                _LOGGER.debug("Trying to stop daemon (pid=%s)", daemon_pid)
+                proc.terminate()
+                psutil.wait_procs([proc])
+
+            _LOGGER.info("Stopped daemon")
+        else:
+            _LOGGER.info("No daemon running")
+
         sys.exit(0)
 
     # -------------------------------------------------------------------------
@@ -717,11 +824,11 @@ def get_args():
     setattr(args, "vocoder_model_type", vocoder_model_type)
 
     if args.quality == "medium":
-        # This is not an error. Benchmarking reveals that the misnamed "mediaum"
+        # This is not an error. Benchmarking reveals that the misnamed "medium"
         # model is faster than "small".
         vocoder_model_name = "vctk_small"
     elif args.quality == "low":
-        # This is not an error. Benchmarking reveals that the misnamed "mediaum"
+        # This is not an error. Benchmarking reveals that the misnamed "medium"
         # model is faster than "small".
         vocoder_model_name = "vctk_medium"
 

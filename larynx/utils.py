@@ -1,9 +1,11 @@
 """Utility methods for Larynx"""
+import getpass
 import logging
 import os
 import shutil
 import tempfile
 import typing
+import urllib.request
 from pathlib import Path
 
 from .constants import VocoderType
@@ -64,7 +66,6 @@ def download_voice(
     voice_name: str, voices_dir: typing.Union[str, Path], link: str
 ) -> Path:
     """Download and extract a voice (or vocoder)"""
-    import requests
     from tqdm.auto import tqdm
 
     voices_dir = Path(voices_dir)
@@ -74,8 +75,7 @@ def download_voice(
         "Downloading voice/vocoder for %s to %s from %s", voice_name, voices_dir, link
     )
 
-    response = requests.get(link, stream=True)
-    assert response.ok, f"Bad response for {link}"
+    response = urllib.request.urlopen(link)
 
     with tempfile.NamedTemporaryFile(mode="wb+", suffix=".tar.gz") as temp_file:
         with tqdm(
@@ -86,9 +86,11 @@ def download_voice(
             desc=voice_name,
             total=int(response.headers.get("content-length", 0)),
         ) as pbar:
-            for chunk in response.iter_content(chunk_size=4096):
+            chunk = response.read(4096)
+            while chunk:
                 temp_file.write(chunk)
                 pbar.update(len(chunk))
+                chunk = response.read(4096)
 
         temp_file.seek(0)
 
@@ -158,3 +160,18 @@ def valid_voice_dir(voice_dir: typing.Union[str, Path]) -> bool:
     """Return True if directory exists and has an onnx file"""
     voice_dir = Path(voice_dir)
     return voice_dir.is_dir() and (len(list(voice_dir.glob("*.onnx"))) > 0)
+
+
+def get_runtime_dir() -> Path:
+    """Return path to XDG_RUNTIME_DIR or fallback"""
+    maybe_runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if maybe_runtime_dir:
+        runtime_dir = Path(maybe_runtime_dir) / "larynx"
+    else:
+        # Fallback to /tmp/larynx-runtime-<user>
+        user = getpass.getuser()
+        runtime_dir = Path(tempfile.gettempdir()) / f"larynx-runtime-{user}"
+
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+
+    return runtime_dir
