@@ -51,6 +51,7 @@ docker run \
     -p 5002:5002 \
     -e "HOME=${HOME}" \
     -v "$HOME:${HOME}" \
+    -v /etc/ssl/certs:/etc/ssl/certs \
     -w "${PWD}" \
     --user "$(id -u):$(id -g)" \
     rhasspy/larynx
