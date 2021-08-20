@@ -1,0 +1,5 @@
+hoe_laat_is_het|Hoe laat is het?
+nog_een_prettige_dag_toegewenst|Nog een prettige dag toegewenst.
+kunt_u_wat_langzamer_praten_alstublieft|Kunt u wat langzamer praten, alstublieft?
+van_harte_gefeliciteerd_met_je_verjaardag|Van Harte Gefeliciteerd met je verjaardag!
+moeder_sneed_zeven_scheve_sneden_brood|Moeder sneed zeven scheve sneden brood.
