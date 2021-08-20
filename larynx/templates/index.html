@@ -420,6 +420,7 @@
                      q('#download').disabled = false
                      q('#audio').src = null
                      q('#audio').autoplay = true
+                     q('#message').textContent = 'Finished ' + info.id
                  }).catch(function(err) {
                      q('#message').textContent = 'Error: ' + err.message
                      q('#download').disabled = false
