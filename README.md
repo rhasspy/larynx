@@ -1,6 +1,6 @@
 # Larynx
 
-End-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/). There are [49 voices available across 9 languages](#samples).
+End-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/). There are [50 voices available across 9 languages](#samples).
 
 ```sh
 curl https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx-server \
@@ -235,8 +235,8 @@ Available vocoders are:
 
 ## Text to Speech Models
 
-* [GlowTTS](https://github.com/rhasspy/glow-tts-train) (47 voices)
-    * English (`en-us`, 26 voices)
+* [GlowTTS](https://github.com/rhasspy/glow-tts-train) (50 voices)
+    * English (`en-us`, 27 voices)
         * blizzard\_fls (F, accent, [Blizzard](https://www.cstr.ed.ac.uk/projects/blizzard/2017/usborne_blizzard2017/license.html))
         * blizzard\_lessac (F, [Blizzard](https://www.cstr.ed.ac.uk/projects/blizzard/2011/lessac_blizzard2011/license.html))
         * cmu\_aew (M, [Arctic](licenses/cmuarctic.txt))
@@ -264,11 +264,11 @@ Available vocoders are:
         * southern\_english\_female (F, [CC/Attr/SA](licenses/cc4asa.txt))
         * southern\_english\_male (M, [CC/Attr/SA](licenses/cc4asa.txt))
         * judy\_bieber (F, [M-AILabs](licenses/m-ailabs.txt))
-    * German (`de-de`, 6 voices)
+    * German (`de-de`, 7 voices)
         * eva\_k (F, [M-AILabs](licenses/m-ailabs.txt))
         * hokuspokus (F, [CC0](licenses/cc0.txt))
         * karlsson (M, [M-AILabs](licenses/m-ailabs.txt))
-        * kersten (F, [CC0](licenses/cc0.txt))
+        * kerstin (F, [CC0](licenses/cc0.txt))
         * pavoque (M, [CC4/BY/NC/SA](https://github.com/marytts/pavoque-data))
         * rebecca\_braunert\_plunkett (F, [M-AILabs](licenses/m-ailabs.txt))
         * thorsten (M, [CC0](licenses/cc0.txt))
@@ -279,10 +279,11 @@ Available vocoders are:
     * Spanish (`es-es`, 2 voices)
         * carlfm (M, public domain)
         * karen\_savage (F, [M-AILabs](licenses/m-ailabs.txt))
-    * Dutch (`nl`, 3 voices)
+    * Dutch (`nl`, 4 voices)
         * bart\_de\_leeuw (M, [Apache2](licenses/apache2.txt))
         * flemishguy (M, [CC0](licenses/cc0.txt))
         * rdh (M, [CC0](licenses/cc0.txt))
+        * nathalie (F, [CC0](licenses/cc0.txt))
     * Italian (`it-it`, 2 voices)
         * lisa (F, [M-AILabs](licenses/m-ailabs.txt))
         * riccardo\_fasol (M, [Apache2](licenses/apache2.txt))
