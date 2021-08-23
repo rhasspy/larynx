@@ -21,13 +21,20 @@ if [[ -n "${update}" ]]; then
     docker pull "rhasspy/larynx:${tag}"
 fi
 
+docker_run_args=()
+
+if [[ -d /etc/ssl/certs ]]; then
+    # Map SSL certs path for downloading voices
+    docker_run_args+=('-v' '/etc/ssl/certs:/etc/ssl/certs')
+fi
+
 "${docker}" run \
             -i \
             -e "HOME=${HOME}" \
             -v "$HOME:${HOME}" \
             -w "${PWD}" \
             --device /dev/snd:/dev/snd \
-            --user "$(id -u):$(id -g)" \
+            --user "$(id -u):$(id -g)" "${docker_run_args[@]}" \
             --entrypoint '/app/.venv/bin/python3' \
             "rhasspy/larynx:${tag}" \
             -m larynx \
