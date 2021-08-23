@@ -330,7 +330,7 @@ async def text_to_wav(
     # Phonemizer
     phoneme_lang: str = tts_model.language  # type: ignore
 
-    if text_lang is None:
+    if not text_lang:
         text_lang = phoneme_lang
 
     phonemizer = get_phonemizer(text_lang)
@@ -541,8 +541,8 @@ async def app_say() -> Response:
     if length_scale is not None:
         length_scale = float(length_scale)
 
-    text_lang = request.args.get("textLanguage")
-    if text_lang is not None:
+    text_lang = request.args.get("textLanguage", "").strip()
+    if text_lang:
         text_lang = gruut.resolve_lang(text_lang)
 
     # Text can come from POST body or GET ?text arg
