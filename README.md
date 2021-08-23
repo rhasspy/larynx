@@ -27,7 +27,7 @@ You can use Larynx to:
 
 ## Samples
 
-[Listen to voice samples](https://rhasspy.github.io/larynx/) from all of the [pre-trained models](https://github.com/rhasspy/larynx/releases).
+[Listen to voice samples](https://rhasspy.github.io/larynx/) from all of the [pre-trained voices](https://github.com/rhasspy/larynx/releases).
 
 ---
 
@@ -39,7 +39,7 @@ Pre-built Docker images are available for the following platforms:
 * `linux/arm64` - Raspberry Pi 64-bit
 * `linux/arm/v7` - Raspberry Pi 32-bit
 
-These images include a single English voice, but [many more can be downloaded](https://github.com/rhasspy/larynx/releases/tag/2021-03-28).
+These images include a single English voice, but [many more can be downloaded](https://github.com/rhasspy/larynx/releases/tag/2021-03-28) from within the web interface.
 
 The [larynx](https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx) and [larynx](https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx-server) shell scripts wrap the Docker images, allowing you to use Larynx as a command-line tool.
 
@@ -75,11 +75,23 @@ From there, you may run the `larynx` command or `larynx-server` to start the web
 
 ## Python Installation
 
+Start by creating a virtual environment:
+
 ```sh
-pip install -f 'https://synesthesiam.github.io/prebuilt-apps/' larynx
+python3 -m venv larynx_venv
+source larynx_venv/bin/activate
+
+pip3 install --upgrade pip
+pip3 install --upgrade wheel setuptools
 ```
 
-Then run `python3 -m larynx` or `python3 -m larynx.server` for the web server.
+Next, install larynx (with a reference to [a supplementary pip repo](https://synesthesiam.github.io/prebuilt-apps/) for the 32-bit ARM onnxruntime wheel):
+
+```sh
+pip3 install -f 'https://synesthesiam.github.io/prebuilt-apps/' larynx
+```
+
+Then run `larynx` or `larynx.server` for the web server. You may also execute the Python modules directly with `python3 -m larynx` and `python3 -m larynx.server`.
 
 For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/tag/v1.0/) is available (official 64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
 
@@ -95,7 +107,7 @@ Larynx has a flexible command-line interface, available with:
 
 * The [larynx script](https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx) for Docker 
 * The `larynx` command from the Debian package
-* `python3 -m larynx` for Python installations
+* `larynx` or `python3 -m larynx` for Python installations
 
 ### Basic Synthesis
 
@@ -103,7 +115,7 @@ Larynx has a flexible command-line interface, available with:
 larynx -v <VOICE> "<TEXT>" > output.wav
 ```
 
-where `<VOICE>` is a language name (`en`, `de`, etc) or a voice name (`ljspeech`, `thorsten`, etc). `<TEXT>` may contain multiple sentences, which will be combined in the final output WAV file.
+where `<VOICE>` is a language name (`en`, `de`, etc) or a voice name (`ljspeech`, `thorsten`, etc). `<TEXT>` may contain multiple sentences, which will be combined in the final output WAV file. These can also be [split into separate WAV files](#multiple-wav-output).
 
 To adjust the quality of the output, use `-q <QUALITY>` where `<QUALITY>` is "high" (slowest), "medium", or "low" (fastest).
 
@@ -115,9 +127,14 @@ If your text is very long, and you would like to listen to it as its being synth
 larynx -v en --raw-stream < long.txt | aplay -r 22050 -c 1 -f S16_LE
 ```
 
-The output will be 16-bit 22050Hz mono PCM. By default, 10 sentences will be kept in an output queue, only blocking synthesis when the queue is full. You can adjust this value with `--raw-stream-queue-size`. Additionally, you can adjust `--max-thread-workers` to change how many threads are available for synthesis.
+Each input line with be synthesized and written the standard out as raw 16-bit 22050Hz mono PCM. By default, 5 sentences will be kept in an output queue, only blocking synthesis when the queue is full. You can adjust this value with `--raw-stream-queue-size`. Additionally, you can adjust `--max-thread-workers` to change how many threads are available for synthesis.
 
-If your long text is fixed-width with blank lines separating paragraphs like those from [Project Gutenberg](https://www.gutenberg.org/), use the `--process-on-blank-line` option so that sentences will not be broken at line boundaries.
+If your long text is fixed-width with blank lines separating paragraphs like those from [Project Gutenberg](https://www.gutenberg.org/), use the `--process-on-blank-line` option so that sentences will not be broken at line boundaries. For example, you can listen to "Alice in Wonderland" like this:
+
+```sh
+curl --output - 'https://www.gutenberg.org/files/11/11-0.txt' | \
+    larynx -v ek --raw-stream --process-on-blank-line | aplay -r 22050 -c 1 -f S16_LE
+```
 
 ### Multiple WAV Output
 
@@ -186,11 +203,32 @@ Words example:
 larynx -v en --inline '{{ bee yawn say }}' | aplay
 ```
 
-Multiple word segements [example](https://tardis.fandom.com/wiki/Raxacoricofallapatorius):
+Multiple word segments [example](https://tardis.fandom.com/wiki/Raxacoricofallapatorius):
 
 ```sh
 # raxacoricofallipatorius
 larynx -v en --inline '{{ racks uh core {i}t {co}de {fall}{i}ble {pu}n tore s{ee} us }}' | aplay
+```
+
+### Custom Lexicons
+
+Use the `--lexicon` option to `larynx` and `larynx-server` to include a file with your custom word pronunciations (for `larynx-server` add a lexicon for each language with `--lexicon <LANGUAGE> <LEXICON>`). The format of the lexicon file is:
+
+```
+word phoneme phoneme ...
+word phoneme phoneme ...
+```
+
+Using the example from above, you could have:
+
+```
+beyoncé b ˈi j ˈɔ n s ˈeɪ
+```
+
+The inline pronunciation format is supported here, so may also have entries like this:
+
+```
+beyoncé {{ bee yawn say }}
 ```
 
 ### GlowTTS Settings
