@@ -365,6 +365,9 @@ def main():
         def output_raw_stream():
             while True:
                 audio = raw_queue.get()
+                if audio is None:
+                    break
+
                 _LOGGER.debug(
                     "Writing %s byte(s) of 16-bit 22050Hz mono PCM to stdout",
                     len(audio),
@@ -382,95 +385,106 @@ def main():
     # Process input lines
     # -------------------
     start_time_to_first_audio = time.perf_counter()
-    for line in texts:
-        line_id = ""
-        line = line.strip()
-        if not line:
-            continue
 
-        if args.output_naming == OutputNaming.ID:
-            # Line has the format id|text instead of just text
-            line_id, line = line.split(args.id_delimiter, maxsplit=1)
+    try:
+        for line in texts:
+            line_id = ""
+            line = line.strip()
+            if not line:
+                continue
 
-        text_and_audios = text_to_speech(
-            text=line,
-            lang=args.language,
-            tts_model=tts_load_future,
-            vocoder_model=vocoder_load_future,
-            audio_settings=audio_settings,
-            number_converters=args.number_converters,
-            disable_currency=args.disable_currency,
-            word_indexes=args.word_indexes,
-            inline_pronunciations=args.inline,
-            phoneme_transform=phoneme_transform,
-            phoneme_lang=phoneme_lang,
-            tts_settings=tts_settings,
-            max_workers=max_thread_workers,
-            executor=executor,
-            phonemizer=phonemizer,
-        )
+            if args.output_naming == OutputNaming.ID:
+                # Line has the format id|text instead of just text
+                line_id, line = line.split(args.id_delimiter, maxsplit=1)
 
-        text_id = ""
+            text_and_audios = text_to_speech(
+                text=line,
+                lang=args.language,
+                tts_model=tts_load_future,
+                vocoder_model=vocoder_load_future,
+                audio_settings=audio_settings,
+                number_converters=args.number_converters,
+                disable_currency=args.disable_currency,
+                word_indexes=args.word_indexes,
+                inline_pronunciations=args.inline,
+                phoneme_transform=phoneme_transform,
+                phoneme_lang=phoneme_lang,
+                tts_settings=tts_settings,
+                max_workers=max_thread_workers,
+                executor=executor,
+                phonemizer=phonemizer,
+            )
 
-        for text_idx, (text, audio) in enumerate(text_and_audios):
-            if text_idx == 0:
-                end_time_to_first_audio = time.perf_counter()
-                _LOGGER.debug(
-                    "Seconds to first audio: %s",
-                    end_time_to_first_audio - start_time_to_first_audio,
-                )
+            text_id = ""
 
-            if args.raw_stream:
-                assert raw_queue is not None
-                raw_queue.put(audio.tobytes())
-            elif args.interactive or args.output_dir:
-                # Convert to WAV audio
-                with io.BytesIO() as wav_io:
-                    wav_write(wav_io, args.sample_rate, audio)
-                    wav_data = wav_io.getvalue()
-
-                assert wav_data is not None
-
-                if args.interactive:
-
-                    # Play audio
-                    _LOGGER.debug("Playing audio with play command")
-                    subprocess.run(
-                        play_command,
-                        input=wav_data,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        check=True,
+            for text_idx, (text, audio) in enumerate(text_and_audios):
+                if text_idx == 0:
+                    end_time_to_first_audio = time.perf_counter()
+                    _LOGGER.debug(
+                        "Seconds to first audio: %s",
+                        end_time_to_first_audio - start_time_to_first_audio,
                     )
 
-                if args.output_dir:
-                    # Determine file name
-                    if args.output_naming == OutputNaming.TEXT:
-                        # Use text itself
-                        file_name = text.replace(" ", "_")
-                        file_name = file_name.translate(
-                            str.maketrans("", "", string.punctuation.replace("_", ""))
+                if args.raw_stream:
+                    assert raw_queue is not None
+                    raw_queue.put(audio.tobytes())
+                elif args.interactive or args.output_dir:
+                    # Convert to WAV audio
+                    with io.BytesIO() as wav_io:
+                        wav_write(wav_io, args.sample_rate, audio)
+                        wav_data = wav_io.getvalue()
+
+                    assert wav_data is not None
+
+                    if args.interactive:
+
+                        # Play audio
+                        _LOGGER.debug("Playing audio with play command")
+                        subprocess.run(
+                            play_command,
+                            input=wav_data,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=True,
                         )
-                    elif args.output_naming == OutputNaming.TIME:
-                        # Use timestamp
-                        file_name = str(time.time())
-                    elif args.output_naming == OutputNaming.ID:
-                        if not text_id:
-                            text_id = line_id
-                        else:
-                            text_id = f"{line_id}_{text_idx + 1}"
 
-                        file_name = text_id
+                    if args.output_dir:
+                        # Determine file name
+                        if args.output_naming == OutputNaming.TEXT:
+                            # Use text itself
+                            file_name = text.replace(" ", "_")
+                            file_name = file_name.translate(
+                                str.maketrans(
+                                    "", "", string.punctuation.replace("_", "")
+                                )
+                            )
+                        elif args.output_naming == OutputNaming.TIME:
+                            # Use timestamp
+                            file_name = str(time.time())
+                        elif args.output_naming == OutputNaming.ID:
+                            if not text_id:
+                                text_id = line_id
+                            else:
+                                text_id = f"{line_id}_{text_idx + 1}"
 
-                    assert file_name, f"No file name for text: {text}"
-                    wav_path = args.output_dir / (file_name + ".wav")
-                    with open(wav_path, "wb") as wav_file:
-                        wav_write(wav_file, args.sample_rate, audio)
+                            file_name = text_id
 
-                    _LOGGER.debug("Wrote %s", wav_path)
-            else:
-                # Combine all audio and output to stdout at the end
-                all_audios.append(audio)
+                        assert file_name, f"No file name for text: {text}"
+                        wav_path = args.output_dir / (file_name + ".wav")
+                        with open(wav_path, "wb") as wav_file:
+                            wav_write(wav_file, args.sample_rate, audio)
+
+                        _LOGGER.debug("Wrote %s", wav_path)
+                else:
+                    # Combine all audio and output to stdout at the end
+                    all_audios.append(audio)
+    except KeyboardInterrupt:
+        if raw_queue is not None:
+            # Draw audio playback queue
+            while not raw_queue.empty():
+                raw_queue.get()
+
+            raw_queue.put(None)
 
     # -------------------------------------------------------------------------
 
@@ -603,7 +617,7 @@ def get_args():
     parser.add_argument(
         "--denoiser-strength",
         type=float,
-        default=0.001,
+        default=0.005,
         help="Strength of denoiser, if available (default: 0 = disabled)",
     )
 
@@ -641,8 +655,8 @@ def get_args():
     )
     parser.add_argument(
         "--raw-stream-queue-size",
-        default=10,
-        help="Maximum number of sentences to maintain in output queue with --raw-stream (default: 10)",
+        default=5,
+        help="Maximum number of sentences to maintain in output queue with --raw-stream (default: 5)",
     )
     parser.add_argument(
         "--process-on-blank-line",
