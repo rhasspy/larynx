@@ -84,6 +84,15 @@
                         <input type="number" id="length-scale" name="lengthScale" size="5" min="0" step="0.001" value="1">
                     </div>
                 </div>
+                <div class="row mt-3">
+                    <div class="col-auto">
+                        <label for="text-language" title="Text language">Text Language:</label>
+                        <input type="text" id="text-language" name="language" placeholder="voice language">
+                    </div>
+                    <div class="col-auto">
+                        <p>(empty = use voice language)
+                    </div>
+                </div>
                 <div class="row mt-2">
                     <div class="col-auto">
                         <input type="checkbox" id="inline-pronunciations" checked>
@@ -169,6 +178,7 @@
              var denoiserStrength = q('#denoiser-strength').value || '0'
              var noiseScale = q('#noise-scale').value || '0.333'
              var lengthScale = q('#length-scale').value || '1.0'
+             var textLanguage = q('#text-language').value || ''
              var inlinePronunciations = q('#inline-pronunciations').checked ? 'true' : 'false'
 
              q('#audio-message').hidden = false
@@ -182,6 +192,7 @@
                  '&denoiserStrength=' + encodeURIComponent(denoiserStrength) +
                  '&noiseScale=' + encodeURIComponent(noiseScale) +
                  '&lengthScale=' + encodeURIComponent(lengthScale) +
+                 '&textLanguage=' + encodeURIComponent(textLanguage) +
                  '&inlinePronunciations=' + encodeURIComponent(inlinePronunciations),
                  {cache: 'no-cache'})
 

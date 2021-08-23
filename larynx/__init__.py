@@ -62,6 +62,7 @@ def text_to_speech(
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     max_workers: typing.Optional[int] = 2,
     executor: typing.Optional[Executor] = None,
+    phonemizer: typing.Optional[gruut.Phonemizer] = None,
 ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
     phoneme_lang = phoneme_lang or lang
@@ -92,7 +93,11 @@ def text_to_speech(
                     "use_number_converters": number_converters,
                     "do_replace_currency": (not disable_currency),
                 },
-                phonemizer_args={"word_break": gruut_ipa.IPA.BREAK_WORD.value},
+                phonemizer=phonemizer,
+                phonemizer_args={
+                    "word_break": gruut_ipa.IPA.BREAK_WORD.value,
+                    "use_word_indexes": word_indexes,
+                },
             )
         ),
     )

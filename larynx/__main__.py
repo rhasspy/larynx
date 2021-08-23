@@ -14,6 +14,7 @@ import time
 import typing
 import urllib.parse
 import urllib.request
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
@@ -124,7 +125,7 @@ def main():
             )
 
         def phoneme_map_transform(p):
-            phoneme_map.get(p, p)
+            return phoneme_map.get(p, p)
 
         phoneme_transform = phoneme_map_transform
 
@@ -227,6 +228,56 @@ def main():
                 text += " " + line
 
         texts = process_on_blank_line(texts)
+
+    # -------------------------------------------------------------------------
+
+    # Custom lexicon
+    from gruut import WordPronunciation, get_phonemizer, encode_inline_pronunciations
+    from gruut_ipa import IPA
+
+    lexicon: typing.Optional[
+        typing.MutableMapping[str, typing.List[WordPronunciation]]
+    ] = None
+
+    inline_prons: typing.List[typing.Tuple[str, str]] = []
+
+    if args.lexicon:
+        _LOGGER.debug("Loading lexicon from %s", args.lexicon)
+        lexicon = defaultdict(list)
+
+        with open(args.lexicon, "r") as lexicon_file:
+            for line in lexicon_file:
+                line = line.strip()
+                if not line:
+                    continue
+
+                word, phonemes = line.split(maxsplit=1)
+                if phonemes.startswith("{{") and phonemes.endswith("}}"):
+                    # {{ inline pronunciation }}
+                    inline_prons.append((word, phonemes))
+                else:
+                    # Phonemes
+                    lexicon[word].append(WordPronunciation(phonemes=phonemes.split()))
+
+    phonemizer = get_phonemizer(
+        args.language,
+        word_break=IPA.BREAK_WORD.value,
+        inline_pronunciations=args.inline,
+        use_word_indexes=args.word_indexes,
+        lexicon=lexicon,
+    )
+
+    assert phonemizer is not None, f"Unsupported language: {args.language}"
+
+    if (lexicon is not None) and inline_prons:
+        # Expand {{ inline pronunciations }}
+        for word, inline_pron in inline_prons:
+            encoded_pron = encode_inline_pronunciations(inline_pron, None)
+            word_pron = phonemizer.get_pronunciation(
+                encoded_pron, inline_pronunciations=True
+            )
+            if word_pron is not None:
+                lexicon[word].append(word_pron)
 
     # -------------------------------------------------------------------------
 
@@ -356,6 +407,7 @@ def main():
             tts_settings=tts_settings,
             max_workers=max_thread_workers,
             executor=executor,
+            phonemizer=phonemizer,
         )
 
         text_id = ""
@@ -505,6 +557,9 @@ def get_args():
         "--inline",
         action="store_true",
         help="Enable inline phonemes and word pronunciations",
+    )
+    parser.add_argument(
+        "--lexicon", help="Path to custom lexicon with format WORD PHONEME PHONEME ..."
     )
 
     # Phonemes

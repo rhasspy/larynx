@@ -11,6 +11,7 @@ import platform
 import signal
 import time
 import typing
+from collections import defaultdict
 from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
@@ -121,6 +122,13 @@ parser.add_argument(
 parser.add_argument(
     "--pidfile", help="Path to pidfile. Exit if pidfile already exists."
 )
+parser.add_argument(
+    "--lexicon",
+    nargs=2,
+    action="append",
+    metavar=("language", "lexicon"),
+    help="Language and path to custom lexicon with format WORD PHONEME PHONEME ...",
+)
 parser.add_argument("--logfile", help="Path to logging file (default: stderr)")
 parser.add_argument(
     "--debug", action="store_true", help="Print DEBUG messages to console"
@@ -178,7 +186,10 @@ _DEFAULT_VOCODER = {
 _TTS_MODELS: typing.Dict[str, TextToSpeechModel] = {}
 _AUDIO_SETTINGS: typing.Dict[str, AudioSettings] = {}
 _VOCODER_MODELS: typing.Dict[str, VocoderModel] = {}
-_GRUUT_PHONEMIZER: typing.Dict[str, gruut.SqlitePhonemizer] = {}
+_GRUUT_PHONEMIZER: typing.Dict[str, gruut.Phonemizer] = {}
+_PHONEME_TRANSFORM: typing.Dict[
+    typing.Tuple[str, str], typing.Callable[[str], str]
+] = {}
 
 
 async def text_to_wav(
@@ -189,6 +200,7 @@ async def text_to_wav(
     noise_scale: typing.Optional[float] = None,
     length_scale: typing.Optional[float] = None,
     inline_pronunciations: bool = False,
+    text_lang: typing.Optional[str] = None,
 ) -> bytes:
     """Runs TTS for each line and accumulates all audio into a single WAV."""
     language: typing.Optional[str] = None
@@ -315,6 +327,52 @@ async def text_to_wav(
     if denoiser_strength is not None:
         vocoder_settings = {"denoiser_strength": denoiser_strength}
 
+    # Phonemizer
+    phoneme_lang: str = tts_model.language  # type: ignore
+
+    if text_lang is None:
+        text_lang = phoneme_lang
+
+    phonemizer = get_phonemizer(text_lang)
+    phoneme_transform: typing.Optional[typing.Callable[[str], str]] = None
+
+    if text_lang != phoneme_lang:
+        phoneme_transform = _PHONEME_TRANSFORM.get((text_lang, phoneme_lang))
+        if phoneme_transform is None:
+            from gruut_ipa import Phoneme, Phonemes
+            from gruut_ipa.accent import guess_phonemes
+
+            # Guess phoneme map
+            from_phonemes, to_phonemes = (
+                Phonemes.from_language(text_lang),
+                Phonemes.from_language(phoneme_lang),
+            )
+
+            phoneme_map = {
+                from_p.text: [
+                    to_p.text
+                    for to_p in typing.cast(
+                        typing.List[Phoneme], guess_phonemes(from_p, to_phonemes)
+                    )
+                ]
+                for from_p in from_phonemes
+            }
+
+            _LOGGER.debug(
+                "Guessed phoneme map from %s to %s: %s",
+                text_lang,
+                phoneme_lang,
+                phoneme_map,
+            )
+
+            def phoneme_map_transform(p):
+                return phoneme_map.get(p, p)
+
+            phoneme_transform = phoneme_map_transform
+
+            # Cache for later
+            _PHONEME_TRANSFORM[(text_lang, phoneme_lang)] = phoneme_transform
+
     # Synthesize each line separately.
     # Accumulate into a single WAV file.
     _LOGGER.info("Synthesizing with %s, %s (%s char(s))...", voice, vocoder, len(text))
@@ -325,13 +383,16 @@ async def text_to_wav(
         functools.partial(
             text_to_speech,
             text=text,
-            lang=tts_model.language,  # type: ignore
+            lang=phoneme_lang,
+            text_lang=text_lang,
             tts_model=tts_model,
             vocoder_model=vocoder_model,
             audio_settings=audio_settings,
             tts_settings=tts_settings,
             vocoder_settings=vocoder_settings,
             inline_pronunciations=inline_pronunciations,
+            phonemizer=phonemizer,
+            phoneme_transform=phoneme_transform,
         ),
     )
 
@@ -480,6 +541,10 @@ async def app_say() -> Response:
     if length_scale is not None:
         length_scale = float(length_scale)
 
+    text_lang = request.args.get("textLanguage")
+    if text_lang is not None:
+        text_lang = gruut.resolve_lang(text_lang)
+
     # Text can come from POST body or GET ?text arg
     if request.method == "POST":
         text = (await request.data).decode()
@@ -503,6 +568,7 @@ async def app_say() -> Response:
         noise_scale=noise_scale,
         length_scale=length_scale,
         inline_pronunciations=inline_pronunciations,
+        text_lang=text_lang,
     )
 
     return Response(wav_bytes, mimetype="audio/wav")
@@ -574,10 +640,7 @@ async def api_word_phonemes():
     assert word, "No word given"
 
     language = request.args.get("language", "en-us")
-    phonemizer = _GRUUT_PHONEMIZER.get(language)
-    if phonemizer is None:
-        phonemizer = gruut.get_phonemizer(language)
-        _GRUUT_PHONEMIZER[language] = phonemizer
+    phonemizer = get_phonemizer(language)
 
     pron_phonemes: typing.List[typing.List[str]] = []
 
@@ -648,6 +711,71 @@ async def api_voices():
         lines.append(voice_id)
 
     return "\n".join(lines)
+
+
+# -----------------------------------------------------------------------------
+
+
+def get_phonemizer(language: str) -> gruut.Phonemizer:
+    phonemizer = _GRUUT_PHONEMIZER.get(language)
+    if phonemizer is None:
+        # Custom lexicon
+        lexicon: typing.Optional[
+            typing.MutableMapping[str, typing.List[gruut.WordPronunciation]]
+        ] = None
+
+        lexicon_path: typing.Optional[str] = None
+        inline_prons: typing.List[typing.Tuple[str, str]] = []
+
+        if args.lexicon:
+            # Check for a custom lexicon for this language
+            for lexicon_lang, lexicon_lang_path in args.lexicon:
+                if lexicon_lang == language:
+                    lexicon_path = lexicon_lang_path
+                    break
+
+        if lexicon_path is not None:
+            _LOGGER.debug("Loading lexicon from %s", lexicon_path)
+            lexicon = defaultdict(list)
+
+            with open(lexicon_path, "r") as lexicon_file:
+                for line in lexicon_file:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    word, phonemes = line.split(maxsplit=1)
+                    if phonemes.startswith("{{") and phonemes.endswith("}}"):
+                        # {{ inline pronunciation }}
+                        inline_prons.append((word, phonemes))
+                    else:
+                        # Phonemes
+                        lexicon[word].append(
+                            gruut.WordPronunciation(phonemes=phonemes.split())
+                        )
+
+        phonemizer = gruut.get_phonemizer(
+            language,
+            word_break=gruut_ipa.IPA.BREAK_WORD.value,
+            inline_pronunciations=True,
+            lexicon=lexicon,
+        )
+
+        assert phonemizer is not None, f"Unsupported language: {language}"
+
+        if (lexicon is not None) and inline_prons:
+            # Expand {{ inline pronunciations }}
+            for word, inline_pron in inline_prons:
+                encoded_pron = gruut.encode_inline_pronunciations(inline_pron, None)
+                word_pron = phonemizer.get_pronunciation(
+                    encoded_pron, inline_pronunciations=True
+                )
+                if word_pron is not None:
+                    lexicon[word].append(word_pron)
+
+        _GRUUT_PHONEMIZER[language] = phonemizer
+
+    return phonemizer
 
 
 # -----------------------------------------------------------------------------
