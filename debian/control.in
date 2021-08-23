@@ -3,6 +3,7 @@ Version: @VERSION@
 Section: utils
 Priority: optional
 Depends: libopenblas-base,libgomp1,libatomic1
+Recommends: sox
 Architecture: @DEBIAN_ARCH@
 Maintainer: Michael Hansen
 Description: Neural text to speech engine using the International Phonetic Alphabet
