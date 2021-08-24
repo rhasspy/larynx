@@ -358,6 +358,8 @@ def main():
 
     # Raw stream queue
     raw_queue: typing.Optional["Queue[bytes]"] = None
+    raw_stream_thread: typing.Optional[threading.Thread] = None
+
     if args.raw_stream:
         # Output in a separate thread to avoid blocking audio processing
         raw_queue = Queue(maxsize=args.raw_stream_queue_size)
@@ -375,7 +377,8 @@ def main():
                 sys.stdout.buffer.write(audio)
                 sys.stdout.buffer.flush()
 
-        threading.Thread(target=output_raw_stream, daemon=True).start()
+        raw_stream_thread = threading.Thread(target=output_raw_stream, daemon=True)
+        raw_stream_thread.start()
 
     all_audios: typing.List[np.ndarray] = []
     wav_data: typing.Optional[bytes] = None
@@ -483,8 +486,13 @@ def main():
             # Draw audio playback queue
             while not raw_queue.empty():
                 raw_queue.get()
-
+    finally:
+        # Wait for raw stream to finish
+        if raw_queue is not None:
             raw_queue.put(None)
+
+        if raw_stream_thread is not None:
+            raw_stream_thread.join()
 
     # -------------------------------------------------------------------------
 
