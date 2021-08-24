@@ -41,7 +41,7 @@ Pre-built Docker images are available for the following platforms:
 
 These images include a single English voice, but [many more can be downloaded](https://github.com/rhasspy/larynx/releases/tag/2021-03-28) from within the web interface.
 
-The [larynx](https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx) and [larynx](https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx-server) shell scripts wrap the Docker images, allowing you to use Larynx as a command-line tool.
+The [larynx](https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx) and [larynx-server](https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx-server) shell scripts wrap the Docker images, allowing you to use Larynx as a command-line tool.
 
 To manually run the Larynx web server in Docker:
 
@@ -63,7 +63,7 @@ Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi
 
 ## Debian Installation
 
-Pre-built Debian packages are [available for download](https://github.com/rhasspy/larynx/releases/tag/v0.5.0) with the name `larynx-tts_<VERSION>_<ARCH>.deb` where `ARCH` is one of `amd64` (most desktops, laptops), `armhf` (32-bit Raspberry Pi), and `arm64` (64-bit Raspberry Pi)
+Pre-built Debian packages are [available for download](https://github.com/rhasspy/larynx/releases/tag/v0.5) with the name `larynx-tts_<VERSION>_<ARCH>.deb` where `ARCH` is one of `amd64` (most desktops, laptops), `armhf` (32-bit Raspberry Pi), and `arm64` (64-bit Raspberry Pi)
     
 Example installation on a typical desktop:
 
@@ -255,20 +255,22 @@ larynx --list
 To use Larynx as a drop-in replacement for a [MaryTTS](http://mary.dfki.de/) server (e.g., for use with [Home Assistant](https://www.home-assistant.io/integrations/marytts/)), run:
 
 ```sh
-$ docker run -it -p 59125:5002 rhasspy/larynx:<LANG>
+docker run \
+    -it \
+    -p 59125:5002 \
+    -e "HOME=${HOME}" \
+    -v "$HOME:${HOME}" \
+    -v /etc/ssl/certs:/etc/ssl/certs \
+    -w "${PWD}" \
+    --user "$(id -u):$(id -g)" \
+    rhasspy/larynx
 ```
 
-The `/process` HTTP endpoint should now work for voices formatted as `<LANG>/<VOICE>` such as `en-us/harvard-glow_tts`.
+The `/process` HTTP endpoint should now work for voices formatted as `<LANG>` or `<VOICE>`, e.g. `en` or `harvard`.
 
-You can specify the vocoder by adding `;<VOCODER>` to the MaryTTS voice.
+You can specify the vocoder quality by adding `;<QUALITY>` to the MaryTTS voice where `QUALITY` is "high", "medium", or "low".
 
-For example: `en-us/harvard-glow_tts;hifi_gan:vctk_medium` will use the lowest quality (but fastest) vocoder. This is usually necessary to get decent performance on a Raspberry Pi.
-
-Available vocoders are:
-
-* `hifi_gan:universal_large` (best quality, slowest, default)
-* `hifi_gan:vctk_small`
-* `hifi_gan:vctk_medium` (lowest quality, fastest)
+For example: `en;low` will use the lowest quality (but fastest) vocoder. This is usually necessary to get decent performance on a Raspberry Pi.
 
 ---
 

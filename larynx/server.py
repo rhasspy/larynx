@@ -99,8 +99,8 @@ parser.add_argument(
 parser.add_argument(
     "--denoiser-strength",
     type=float,
-    default=0.001,
-    help="Denoiser strength used if not set in API call (default: 0.001)",
+    default=0.005,
+    help="Denoiser strength used if not set in API call (default: 0.005)",
 )
 parser.add_argument(
     "--noise-scale",
@@ -175,12 +175,14 @@ app = quart_cors.cors(app)
 
 _DEFAULT_AUDIO_SETTINGS = AudioSettings()
 
-# Set default vocoder based on quality
-_DEFAULT_VOCODER = {
+_VOCODER_QUALITY = {
     "high": "hifi_gan/universal_large",
     "medium": "hifi_gan/vctk_medium",
     "low": "hifi_gan/vctk_small",
-}[args.quality]
+}
+
+# Set default vocoder based on quality
+_DEFAULT_VOCODER = _VOCODER_QUALITY[args.quality]
 
 # Caches
 _TTS_MODELS: typing.Dict[str, TextToSpeechModel] = {}
@@ -689,7 +691,12 @@ async def api_process():
     if ";" in voice:
         voice, vocoder = voice.split(";", maxsplit=1)
 
-    vocoder = vocoder or _DEFAULT_VOCODER
+    if vocoder is not None:
+        # Try to interpret as quality
+        vocoder = vocoder.strip()
+        vocoder = _VOCODER_QUALITY.get(vocoder, vocoder)
+    else:
+        vocoder = _DEFAULT_VOCODER
 
     wav_bytes = await text_to_wav(
         text,
