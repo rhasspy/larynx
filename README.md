@@ -1,6 +1,6 @@
 # Larynx
 
-End-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/). There are [50 voices available across 9 languages](#samples).
+Offline end-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/) ([architecture](#architecture)). There are [50 voices available across 9 languages](#samples).
 
 ```sh
 curl https://raw.githubusercontent.com/rhasspy/larynx/master/docker/larynx-server \
@@ -127,7 +127,7 @@ If your text is very long, and you would like to listen to it as its being synth
 larynx -v en --raw-stream < long.txt | aplay -r 22050 -c 1 -f S16_LE
 ```
 
-Each input line with be synthesized and written the standard out as raw 16-bit 22050Hz mono PCM. By default, 5 sentences will be kept in an output queue, only blocking synthesis when the queue is full. You can adjust this value with `--raw-stream-queue-size`. Additionally, you can adjust `--max-thread-workers` to change how many threads are available for synthesis.
+Each input line will be synthesized and written the standard out as raw 16-bit 22050Hz mono PCM. By default, 5 sentences will be kept in an output queue, only blocking synthesis when the queue is full. You can adjust this value with `--raw-stream-queue-size`. Additionally, you can adjust `--max-thread-workers` to change how many threads are available for synthesis.
 
 If your long text is fixed-width with blank lines separating paragraphs like those from [Project Gutenberg](https://www.gutenberg.org/), use the `--process-on-blank-line` option so that sentences will not be broken at line boundaries. For example, you can listen to "Alice in Wonderland" like this:
 
@@ -375,3 +375,18 @@ The RTF (real-time factor) is computed as the time taken to synthesize audio div
 | armv7l   | low     | 2.22  |
 
 See the benchmarking scripts in `scripts/` for more details.
+
+---
+
+## Architecture
+
+Larynx breaks text to speech into 4 distinct steps:
+
+1. Text to [IPA](https://en.wikipedia.org/wiki/International_Phonetic_Alphabet) phonemes ([gruut](https://github.com/rhasspy/gruut))
+2. Phonemes to ids (`phonemes.txt` file from voice)
+3. Phoneme ids to mel spectrograms ([glow-tts](https://github.com/rhasspy/glow-tts-train))
+4. Mel spectrograms to waveforms ([hifi-gan](https://github.com/rhasspy/hifi-gan-train))
+
+![Larynx architecture](img/architecture.png)
+
+Voices are trained on phoneme ids and mel spectrograms. For each language, the voice with the most data available was used as a base model and fine-tuned.
