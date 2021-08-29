@@ -1,5 +1,7 @@
 # Larynx
 
+🎥 [DEMO VIDEO](https://www.youtube.com/watch?v=hBmhDf8cl0k)
+
 Offline end-to-end text to speech system using [gruut](https://github.com/rhasspy/gruut) and [onnx](https://onnx.ai/) ([architecture](#architecture)). There are [50 voices available across 9 languages](#samples).
 
 ```sh
