@@ -31,6 +31,11 @@ class VocoderType(str, Enum):
 
 SettingsType = typing.Dict[str, typing.Any]
 
+class VocoderQuality(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
 # -----------------------------------------------------------------------------
 
 

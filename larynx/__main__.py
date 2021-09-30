@@ -50,6 +50,30 @@ class OutputNaming(str, Enum):
 # -----------------------------------------------------------------------------
 
 
+def main2():
+    """Main entry point"""
+    args = get_args()
+
+    import numpy as np
+    from larynx import text_to_speech2
+    from .wavfile import write as wav_write
+
+    all_audios = []
+    for text in args.text:
+        for _text, audio in text_to_speech2(text, lang=args.voice, ssml=args.ssml):
+            all_audios.append(audio)
+
+    # Write combined audio to stdout
+    if all_audios:
+        with io.BytesIO() as wav_io:
+            wav_write(wav_io, args.sample_rate, np.concatenate(all_audios))
+            wav_data = wav_io.getvalue()
+
+        _LOGGER.debug("Writing WAV audio to stdout")
+        sys.stdout.buffer.write(wav_data)
+        sys.stdout.buffer.flush()
+
+
 def main():
     """Main entry point"""
     args = get_args()
@@ -687,6 +711,7 @@ def get_args():
         action="store_true",
         help="Try to stop the currently running Larynx daemon and exit",
     )
+    parser.add_argument("--ssml", action="store_true", help="Input text is SSML")
 
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
@@ -846,6 +871,9 @@ def get_args():
         list_voices_vocoders()
         sys.exit(0)
 
+    # TODO:
+    return args
+
     # -------------------------------------------------------------------------
 
     # Set defaults
@@ -993,4 +1021,4 @@ def get_args():
 # -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    main()
+    main2()

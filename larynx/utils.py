@@ -43,14 +43,33 @@ def load_voices_aliases():
                 # alias alias ... full_name download_name
                 *voice_aliases, full_voice_name, download_name = line.split()
                 for voice_alias in voice_aliases:
-                    VOICE_ALIASES[voice_alias] = full_voice_name
-                    VOICE_DOWNLOAD_NAMES[full_voice_name] = download_name
+                    VOICE_ALIASES[voice_alias] = download_name
+
+                VOICE_ALIASES[full_voice_name] = download_name
+                VOICE_DOWNLOAD_NAMES[full_voice_name] = download_name
 
 
 def resolve_voice_name(voice_name: str) -> str:
     """Resolve voice name using aliases"""
     load_voices_aliases()
     return VOICE_ALIASES.get(voice_name, voice_name)
+
+
+def split_voice_name(voice_name: str) -> typing.Tuple[str, str, str]:
+    """Split resolved voice name (<lang>_<name>-<model_type>) into language, name, model_type"""
+    lang, voice_name = voice_name.split("_", maxsplit=1)
+    last_dash = voice_name.rfind("-")
+    name, model_type = voice_name[:last_dash], voice_name[last_dash + 1 :]
+
+    return lang, name, model_type
+
+
+def resolve_lang(lang: str) -> str:
+    lang = lang.lower()
+    if "_" in lang:
+        lang = "-".join(lang.split("_", maxsplit=1))
+
+    return lang
 
 
 def get_voice_download_name(voice_name: str) -> str:

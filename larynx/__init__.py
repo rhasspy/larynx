@@ -1,6 +1,7 @@
 import logging
 import time
 import typing
+import json
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from pathlib import Path
 
@@ -8,16 +9,19 @@ import gruut
 import gruut_ipa
 import numpy as np
 import onnxruntime
+import phonemes2ids
 
-from .audio import AudioSettings
-from .constants import (
+from larynx.audio import AudioSettings
+from larynx.constants import (
     TextToSpeechModel,
     TextToSpeechModelConfig,
     TextToSpeechType,
     VocoderModel,
     VocoderModelConfig,
     VocoderType,
+    VocoderQuality,
 )
+from larynx.utils import resolve_voice_name, split_voice_name, resolve_lang
 
 _LOGGER = logging.getLogger("larynx")
 
@@ -26,6 +30,127 @@ _DIR = Path(__file__).parent
 __version__ = (_DIR / "VERSION").read_text().strip()
 
 # -----------------------------------------------------------------------------
+
+_TTS_MODEL_CACHE = {}
+_VOCODER_MODEL_CACHE = {}
+
+
+def get_tts_model(
+    name: str = "", lang: str = "en-us"
+) -> typing.Optional[TextToSpeechModel]:
+    resolved_name = resolve_voice_name(name or resolve_lang(lang))
+    maybe_model = _TTS_MODEL_CACHE.get(resolved_name)
+    if maybe_model is None:
+        # TODO: Fix
+        voice_lang, voice_name, voice_model_type = split_voice_name(resolved_name)
+        model_path = Path("local") / voice_lang / f"{voice_name}-{voice_model_type}"
+
+        with open(model_path / "phonemes.txt", "r", encoding="utf-8") as phonemes_file:
+            phoneme_to_id = phonemes2ids.load_phoneme_ids(phonemes_file)
+
+        config_path = model_path / "config.json"
+        _LOGGER.debug("Loading audio settings from %s", config_path)
+        with open(config_path, "r", encoding="utf-8") as config_file:
+            config = json.load(config_file)
+            audio_settings = AudioSettings(**config["audio"])
+
+        model = load_tts_model(voice_model_type, model_path)
+        setattr(model, "phoneme_to_id", phoneme_to_id)
+        setattr(model, "audio_settings", audio_settings)
+
+        # Load phonemes
+
+        # Cache
+        _TTS_MODEL_CACHE[resolved_name] = model
+
+        if name:
+            _TTS_MODEL_CACHE[name] = model
+
+        if lang:
+            _TTS_MODEL_CACHE[lang] = model
+
+        return model
+
+    return maybe_model
+
+
+_VOCODER_QUALITY = {
+    "high": "hifi_gan/universal_large",
+    "medium": "hifi_gan/vctk_medium",
+    "low": "hifi_gan/vctk_small",
+}
+
+_DEFAULT_AUDIO_SETTINGS = AudioSettings()
+
+def get_vocoder_model(
+    quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH
+) -> typing.Optional[TextToSpeechModel]:
+    maybe_model = _VOCODER_MODEL_CACHE.get(quality)
+    if maybe_model is None:
+        model_name = _VOCODER_QUALITY.get(quality, _VOCODER_QUALITY["high"])
+        model_path = Path("local") / model_name
+        model = load_vocoder_model(VocoderType.HIFI_GAN, model_path)
+
+        # Cache
+        _VOCODER_MODEL_CACHE[quality] = model
+
+        return model
+
+    return maybe_model
+
+
+def text_to_speech2(
+    text: str,
+    lang: str = "en-us",
+    quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
+    ssml: bool = False,
+    tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+):
+    futures = {}
+    executor = ThreadPoolExecutor()
+
+    for sentence in gruut.sentences(text, lang=lang, ssml=ssml):
+        tts_model = get_tts_model(sentence.voice or sentence.lang or lang)
+        assert tts_model is not None
+
+        vocoder_model = get_vocoder_model(quality)
+        assert vocoder_model is not None
+
+        phoneme_to_id = getattr(tts_model, "phoneme_to_id", {})
+        audio_settings = getattr(tts_model, "audio_settings", None)
+        if audio_settings is None:
+            audio_settings = _DEFAULT_AUDIO_SETTINGS
+
+
+        sent_phonemes = [w.phonemes for w in sentence if w.phonemes]
+        sent_phoneme_ids = phonemes2ids.phonemes2ids(
+            sent_phonemes,
+            phoneme_to_id,
+            pad="_",
+            blank="#",
+            separate={"ˈ", "ˌ", "²"},
+            simple_punctuation=True,
+        )
+
+        _LOGGER.debug("%s %s %s", sentence.text, sent_phonemes, sent_phoneme_ids)
+
+        future = executor.submit(
+            _sentence_task,
+            np.array(sent_phoneme_ids, dtype=np.int64),
+            audio_settings,
+            tts_model,
+            tts_settings,
+            vocoder_model,
+            vocoder_settings,
+        )
+
+        futures[future] = sentence.text_with_ws
+
+    for future, raw_text in futures.items():
+        audio = future.result()
+        yield raw_text, audio
+
 
 # lang -> phoneme -> id
 _PHONEME_TO_ID: typing.Dict[str, typing.Dict[str, int]] = {}
@@ -45,155 +170,155 @@ _LANG_STRESS = {
 }
 
 
-def text_to_speech(
-    text: str,
-    lang: str,
-    tts_model: typing.Union[TextToSpeechModel, Future],
-    vocoder_model: typing.Union[VocoderModel, Future],
-    audio_settings: AudioSettings,
-    number_converters: bool = False,
-    disable_currency: bool = False,
-    word_indexes: bool = False,
-    inline_pronunciations: bool = False,
-    phoneme_transform: typing.Optional[typing.Callable[[str], str]] = None,
-    text_lang: typing.Optional[str] = None,
-    phoneme_lang: typing.Optional[str] = None,
-    tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    max_workers: typing.Optional[int] = 2,
-    executor: typing.Optional[Executor] = None,
-    phonemizer: typing.Optional[gruut.Phonemizer] = None,
-) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
-    """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
-    phoneme_lang = phoneme_lang or lang
-    text_lang = text_lang or lang
+# def text_to_speech(
+#     text: str,
+#     lang: str,
+#     tts_model: typing.Union[TextToSpeechModel, Future],
+#     vocoder_model: typing.Union[VocoderModel, Future],
+#     audio_settings: AudioSettings,
+#     number_converters: bool = False,
+#     disable_currency: bool = False,
+#     word_indexes: bool = False,
+#     inline_pronunciations: bool = False,
+#     phoneme_transform: typing.Optional[typing.Callable[[str], str]] = None,
+#     text_lang: typing.Optional[str] = None,
+#     phoneme_lang: typing.Optional[str] = None,
+#     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+#     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+#     max_workers: typing.Optional[int] = 2,
+#     executor: typing.Optional[Executor] = None,
+#     phonemizer: typing.Optional[gruut.Phonemizer] = None,
+# ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
+#     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
+#     phoneme_lang = phoneme_lang or lang
+#     text_lang = text_lang or lang
 
-    phoneme_to_id = _PHONEME_TO_ID.get(phoneme_lang)
-    if phoneme_to_id is None:
-        no_stress = not _LANG_STRESS.get(phoneme_lang, False)
-        phonemes_list = gruut.lang.id_to_phonemes(phoneme_lang, no_stress=no_stress)
-        phoneme_to_id = {p: i for i, p in enumerate(phonemes_list)}
-        _LOGGER.debug(phoneme_to_id)
+#     phoneme_to_id = _PHONEME_TO_ID.get(phoneme_lang)
+#     if phoneme_to_id is None:
+#         no_stress = not _LANG_STRESS.get(phoneme_lang, False)
+#         phonemes_list = gruut.lang.id_to_phonemes(phoneme_lang, no_stress=no_stress)
+#         phoneme_to_id = {p: i for i, p in enumerate(phonemes_list)}
+#         _LOGGER.debug(phoneme_to_id)
 
-        _PHONEME_TO_ID[phoneme_lang] = phoneme_to_id
+#         _PHONEME_TO_ID[phoneme_lang] = phoneme_to_id
 
-    # -------------------------------------------------------------------------
-    # Tokenization/Phonemization
-    # -------------------------------------------------------------------------
+#     # -------------------------------------------------------------------------
+#     # Tokenization/Phonemization
+#     # -------------------------------------------------------------------------
 
-    all_sentences = typing.cast(
-        typing.List[gruut.Sentence],
-        list(
-            gruut.text_to_phonemes(
-                text,
-                lang=text_lang,
-                return_format="sentences",
-                inline_pronunciations=inline_pronunciations,
-                tokenizer_args={
-                    "use_number_converters": number_converters,
-                    "do_replace_currency": (not disable_currency),
-                },
-                phonemizer=phonemizer,
-                phonemizer_args={
-                    "word_break": gruut_ipa.IPA.BREAK_WORD.value,
-                    "use_word_indexes": word_indexes,
-                },
-            )
-        ),
-    )
+#     all_sentences = typing.cast(
+#         typing.List[gruut.Sentence],
+#         list(
+#             gruut.text_to_phonemes(
+#                 text,
+#                 lang=text_lang,
+#                 return_format="sentences",
+#                 inline_pronunciations=inline_pronunciations,
+#                 tokenizer_args={
+#                     "use_number_converters": number_converters,
+#                     "do_replace_currency": (not disable_currency),
+#                 },
+#                 phonemizer=phonemizer,
+#                 phonemizer_args={
+#                     "word_break": gruut_ipa.IPA.BREAK_WORD.value,
+#                     "use_word_indexes": word_indexes,
+#                 },
+#             )
+#         ),
+#     )
 
-    # Process sentences in separate threads concurrently
-    futures = {}
-    if executor is None:
-        executor = ThreadPoolExecutor(max_workers=max_workers)
+#     # Process sentences in separate threads concurrently
+#     futures = {}
+#     if executor is None:
+#         executor = ThreadPoolExecutor(max_workers=max_workers)
 
-    for sentence in all_sentences:
-        if sentence.phonemes is None:
-            continue
+#     for sentence in all_sentences:
+#         if sentence.phonemes is None:
+#             continue
 
-        sentence_pron = []
-        for word_pron in sentence.phonemes:
-            for phoneme in word_pron:
-                if not phoneme:
-                    continue
+#         sentence_pron = []
+#         for word_pron in sentence.phonemes:
+#             for phoneme in word_pron:
+#                 if not phoneme:
+#                     continue
 
-                # Split out stress ("ˈa" -> "ˈ", "a")
-                # Loop because languages like Swedish can have multiple
-                # accents on a single phoneme.
-                while phoneme and (
-                    gruut_ipa.IPA.is_stress(phoneme[0])
-                    or gruut_ipa.IPA.is_accent(phoneme[0])
-                ):
-                    sentence_pron.append(phoneme[0])
-                    phoneme = phoneme[1:]
+#                 # Split out stress ("ˈa" -> "ˈ", "a")
+#                 # Loop because languages like Swedish can have multiple
+#                 # accents on a single phoneme.
+#                 while phoneme and (
+#                     gruut_ipa.IPA.is_stress(phoneme[0])
+#                     or gruut_ipa.IPA.is_accent(phoneme[0])
+#                 ):
+#                     sentence_pron.append(phoneme[0])
+#                     phoneme = phoneme[1:]
 
-                sentence_pron.append(phoneme)
+#                 sentence_pron.append(phoneme)
 
-        if not sentence_pron:
-            # No phonemes
-            continue
+#         if not sentence_pron:
+#             # No phonemes
+#             continue
 
-        # Ensure sentence ends with major break
-        if sentence_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
-            sentence_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+#         # Ensure sentence ends with major break
+#         if sentence_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
+#             sentence_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
-        # Add another major break for good measure
-        sentence_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
+#         # Add another major break for good measure
+#         sentence_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
 
-        text_phonemes: typing.Iterable[str] = sentence_pron
+#         text_phonemes: typing.Iterable[str] = sentence_pron
 
-        # ---------------------------------------------------------------------
+#         # ---------------------------------------------------------------------
 
-        if phoneme_transform is not None:
-            mapped_phonemes = []
-            for phoneme in text_phonemes:
-                mapped_phoneme = phoneme_transform(phoneme)
-                if isinstance(mapped_phoneme, str):
-                    mapped_phonemes.append(mapped_phoneme)
-                else:
-                    # List
-                    mapped_phonemes.extend(mapped_phoneme)
+#         if phoneme_transform is not None:
+#             mapped_phonemes = []
+#             for phoneme in text_phonemes:
+#                 mapped_phoneme = phoneme_transform(phoneme)
+#                 if isinstance(mapped_phoneme, str):
+#                     mapped_phonemes.append(mapped_phoneme)
+#                 else:
+#                     # List
+#                     mapped_phonemes.extend(mapped_phoneme)
 
-            text_phonemes = mapped_phonemes
+#             text_phonemes = mapped_phonemes
 
-        _LOGGER.debug("Words for '%s': %s", sentence.raw_text, sentence.clean_words)
-        _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
+#         _LOGGER.debug("Words for '%s': %s", sentence.raw_text, sentence.clean_words)
+#         _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
 
-        # Convert to phoneme ids
-        phoneme_ids_list = []
-        for phoneme in text_phonemes:
-            phoneme_id = phoneme_to_id.get(phoneme)
-            if phoneme_id is not None:
-                phoneme_ids_list.append(phoneme_id)
-            elif not gruut_ipa.IPA.is_stress(phoneme):
-                _LOGGER.warning("%s is missing from voice phoneme inventory", phoneme)
+#         # Convert to phoneme ids
+#         phoneme_ids_list = []
+#         for phoneme in text_phonemes:
+#             phoneme_id = phoneme_to_id.get(phoneme)
+#             if phoneme_id is not None:
+#                 phoneme_ids_list.append(phoneme_id)
+#             elif not gruut_ipa.IPA.is_stress(phoneme):
+#                 _LOGGER.warning("%s is missing from voice phoneme inventory", phoneme)
 
-        phoneme_ids = np.array(phoneme_ids_list)
+#         phoneme_ids = np.array(phoneme_ids_list)
 
-        # Resolve TTS/vocoder model futures
-        if isinstance(tts_model, Future):
-            tts_model = tts_model.result()
+#         # Resolve TTS/vocoder model futures
+#         if isinstance(tts_model, Future):
+#             tts_model = tts_model.result()
 
-        if isinstance(vocoder_model, Future):
-            vocoder_model = vocoder_model.result()
+#         if isinstance(vocoder_model, Future):
+#             vocoder_model = vocoder_model.result()
 
-        future = executor.submit(
-            _sentence_task,
-            phoneme_ids,
-            audio_settings,
-            tts_model,
-            tts_settings,
-            vocoder_model,
-            vocoder_settings,
-        )
+#         future = executor.submit(
+#             _sentence_task,
+#             phoneme_ids,
+#             audio_settings,
+#             tts_model,
+#             tts_settings,
+#             vocoder_model,
+#             vocoder_settings,
+#         )
 
-        futures[future] = sentence.raw_text
+#         futures[future] = sentence.raw_text
 
-    # -------------------------------------------------------------------------
+#     # -------------------------------------------------------------------------
 
-    for future, raw_text in futures.items():
-        audio = future.result()
-        yield raw_text, audio
+#     for future, raw_text in futures.items():
+#         audio = future.result()
+#         yield raw_text, audio
 
 
 # -----------------------------------------------------------------------------
