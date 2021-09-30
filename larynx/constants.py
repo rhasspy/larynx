@@ -31,10 +31,12 @@ class VocoderType(str, Enum):
 
 SettingsType = typing.Dict[str, typing.Any]
 
+
 class VocoderQuality(str, Enum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
+
 
 # -----------------------------------------------------------------------------
 
@@ -44,7 +46,8 @@ class TextToSpeechModelConfig:
     """Configuration base class for text to speech models"""
 
     model_path: Path
-    session_options: onnxruntime.SessionOptions
+    use_cuda: bool = True
+    half: bool = True
 
 
 class TextToSpeechModel(ABC):
@@ -68,7 +71,8 @@ class VocoderModelConfig:
     """Configuration base class for vocoder models"""
 
     model_path: Path
-    session_options: onnxruntime.SessionOptions
+    use_cuda: bool = True
+    half: bool = True
     denoiser_strength: float = 0.0
 
 

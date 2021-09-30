@@ -1,7 +1,7 @@
+import json
 import logging
 import time
 import typing
-import json
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from pathlib import Path
 
@@ -9,8 +9,8 @@ import gruut
 import gruut_ipa
 import numpy as np
 import onnxruntime
-import phonemes2ids
 
+import phonemes2ids
 from larynx.audio import AudioSettings
 from larynx.constants import (
     TextToSpeechModel,
@@ -18,10 +18,10 @@ from larynx.constants import (
     TextToSpeechType,
     VocoderModel,
     VocoderModelConfig,
-    VocoderType,
     VocoderQuality,
+    VocoderType,
 )
-from larynx.utils import resolve_voice_name, split_voice_name, resolve_lang
+from larynx.utils import resolve_lang, resolve_voice_name, split_voice_name
 
 _LOGGER = logging.getLogger("larynx")
 
@@ -36,7 +36,7 @@ _VOCODER_MODEL_CACHE = {}
 
 
 def get_tts_model(
-    name: str = "", lang: str = "en-us"
+    name: str = "", lang: str = "en-us", use_cuda: bool = False, half: bool = True
 ) -> typing.Optional[TextToSpeechModel]:
     resolved_name = resolve_voice_name(name or resolve_lang(lang))
     maybe_model = _TTS_MODEL_CACHE.get(resolved_name)
@@ -54,7 +54,9 @@ def get_tts_model(
             config = json.load(config_file)
             audio_settings = AudioSettings(**config["audio"])
 
-        model = load_tts_model(voice_model_type, model_path)
+        model = load_tts_model(
+            voice_model_type, model_path, use_cuda=use_cuda, half=half
+        )
         setattr(model, "phoneme_to_id", phoneme_to_id)
         setattr(model, "audio_settings", audio_settings)
 
@@ -82,14 +84,24 @@ _VOCODER_QUALITY = {
 
 _DEFAULT_AUDIO_SETTINGS = AudioSettings()
 
+
 def get_vocoder_model(
-    quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH
+    quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
+    use_cuda: bool = False,
+    half: bool = False,
+    denoiser_strength: float = 0.0,
 ) -> typing.Optional[TextToSpeechModel]:
     maybe_model = _VOCODER_MODEL_CACHE.get(quality)
     if maybe_model is None:
         model_name = _VOCODER_QUALITY.get(quality, _VOCODER_QUALITY["high"])
         model_path = Path("local") / model_name
-        model = load_vocoder_model(VocoderType.HIFI_GAN, model_path)
+        model = load_vocoder_model(
+            VocoderType.HIFI_GAN,
+            model_path,
+            use_cuda=use_cuda,
+            half=half,
+            denoiser_strength=denoiser_strength,
+        )
 
         # Cache
         _VOCODER_MODEL_CACHE[quality] = model
@@ -106,22 +118,28 @@ def text_to_speech2(
     ssml: bool = False,
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    denoiser_strength: float = 0.0,
+    use_cuda: bool = False,
+    half: bool = False,
 ):
     futures = {}
     executor = ThreadPoolExecutor()
 
     for sentence in gruut.sentences(text, lang=lang, ssml=ssml):
-        tts_model = get_tts_model(sentence.voice or sentence.lang or lang)
+        tts_model = get_tts_model(
+            sentence.voice or sentence.lang or lang, use_cuda=use_cuda, half=half
+        )
         assert tts_model is not None
 
-        vocoder_model = get_vocoder_model(quality)
+        vocoder_model = get_vocoder_model(
+            quality, use_cuda=use_cuda, half=half, denoiser_strength=denoiser_strength
+        )
         assert vocoder_model is not None
 
         phoneme_to_id = getattr(tts_model, "phoneme_to_id", {})
         audio_settings = getattr(tts_model, "audio_settings", None)
         if audio_settings is None:
             audio_settings = _DEFAULT_AUDIO_SETTINGS
-
 
         sent_phonemes = [w.phonemes for w in sentence if w.phonemes]
         sent_phoneme_ids = phonemes2ids.phonemes2ids(
@@ -385,17 +403,12 @@ def _sentence_task(
 def load_tts_model(
     model_type: typing.Union[str, TextToSpeechType],
     model_path: typing.Union[str, Path],
-    no_optimizations: bool = False,
+    use_cuda: bool = False,
+    half: bool = False,
 ) -> TextToSpeechModel:
     """Load the appropriate text to speech model"""
-    sess_options = onnxruntime.SessionOptions()
-    if no_optimizations:
-        sess_options.graph_optimization_level = (
-            onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
-        )
-
     config = TextToSpeechModelConfig(
-        model_path=Path(model_path), session_options=sess_options
+        model_path=Path(model_path), use_cuda=use_cuda, half=half
     )
 
     if model_type == TextToSpeechType.TACOTRON2:
@@ -417,20 +430,16 @@ def load_tts_model(
 def load_vocoder_model(
     model_type: typing.Union[str, VocoderType],
     model_path: typing.Union[str, Path],
-    no_optimizations: bool = False,
+    use_cuda: bool = False,
+    half: bool = False,
     denoiser_strength: float = 0.0,
     executor: typing.Optional[Executor] = None,
 ) -> VocoderModel:
     """Load the appropriate vocoder model"""
-    sess_options = onnxruntime.SessionOptions()
-    if no_optimizations:
-        sess_options.graph_optimization_level = (
-            onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
-        )
-
     config = VocoderModelConfig(
         model_path=Path(model_path),
-        session_options=sess_options,
+        use_cuda=use_cuda,
+        half=half,
         denoiser_strength=denoiser_strength,
     )
 

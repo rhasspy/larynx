@@ -54,13 +54,29 @@ def main2():
     """Main entry point"""
     args = get_args()
 
+    if args.cuda:
+        import torch
+
+        args.cuda = torch.cuda.is_available()
+        if not args.cuda:
+            args.half = False
+            _LOGGER.warning("CUDA is not available")
+
     import numpy as np
     from larynx import text_to_speech2
     from .wavfile import write as wav_write
 
     all_audios = []
     for text in args.text:
-        for _text, audio in text_to_speech2(text, lang=args.voice, ssml=args.ssml):
+        for _text, audio in text_to_speech2(
+            text,
+            lang=args.voice,
+            ssml=args.ssml,
+            quality=args.quality,
+            use_cuda=args.cuda,
+            half=args.half,
+            denoiser_strength=args.denoiser_strength,
+        ):
             all_audios.append(audio)
 
     # Write combined audio to stdout
@@ -712,6 +728,12 @@ def get_args():
         help="Try to stop the currently running Larynx daemon and exit",
     )
     parser.add_argument("--ssml", action="store_true", help="Input text is SSML")
+    parser.add_argument("--cuda", action="store_true", help="Use CUDA if available")
+    parser.add_argument(
+        "--half",
+        action="store_true",
+        help="Use faster FP16 for inference (requires --cuda)",
+    )
 
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
