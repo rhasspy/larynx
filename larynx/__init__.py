@@ -113,7 +113,7 @@ def get_vocoder_model(
 
 def text_to_speech2(
     text: str,
-    lang: str = "en-us",
+    voice_or_lang: str = "en-us",
     quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
     ssml: bool = False,
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
@@ -122,12 +122,19 @@ def text_to_speech2(
     use_cuda: bool = False,
     half: bool = False,
 ):
+    resolved_name = resolve_voice_name(voice_or_lang)
+    voice_lang, _voice_name, _voice_model_type = split_voice_name(resolved_name)
+
     futures = {}
     executor = ThreadPoolExecutor()
 
-    for sentence in gruut.sentences(text, lang=lang, ssml=ssml):
+    for sentence in gruut.sentences(
+        text, lang=voice_lang, ssml=ssml, explicit_lang=False
+    ):
         tts_model = get_tts_model(
-            sentence.voice or sentence.lang or lang, use_cuda=use_cuda, half=half
+            sentence.voice or sentence.lang or resolved_name,
+            use_cuda=use_cuda,
+            half=half,
         )
         assert tts_model is not None
 

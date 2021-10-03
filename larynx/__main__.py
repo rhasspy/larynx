@@ -54,6 +54,9 @@ def main2():
     """Main entry point"""
     args = get_args()
 
+    import warnings
+    warnings.filterwarnings("error")
+
     if args.cuda:
         import torch
 
@@ -70,7 +73,7 @@ def main2():
     for text in args.text:
         for _text, audio in text_to_speech2(
             text,
-            lang=args.voice,
+            voice_or_lang=args.voice,
             ssml=args.ssml,
             quality=args.quality,
             use_cuda=args.cuda,

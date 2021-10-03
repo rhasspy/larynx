@@ -357,7 +357,9 @@ class FlowGenerator(nn.Module):
         if y_max_length is not None:
             y_max_length = (y_max_length // self.n_sqz) * self.n_sqz
             y = y[:, :, :y_max_length]
-        y_lengths = (y_lengths // self.n_sqz) * self.n_sqz
+        y_lengths = (
+            torch.div(y_lengths, self.n_sqz, rounding_mode="trunc") * self.n_sqz
+        )
         return y, y_lengths, y_max_length
 
     def store_inverse(self):

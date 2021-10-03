@@ -1,5 +1,6 @@
 """Methods for saving/loading checkpoints"""
 import logging
+import sys
 import typing
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,11 +36,7 @@ def load_checkpoint(
     learning_rate = float(checkpoint_dict.get("learning_rate", 1.0))
 
     # Create model/optimizer if necessary
-    model = setup_model(
-        config,
-        model=model,
-        use_cuda=use_cuda,
-    )
+    model = setup_model(config, model=model, use_cuda=use_cuda,)
 
     saved_state_dict = checkpoint_dict["model"]
     if hasattr(model, "module"):
@@ -68,4 +65,23 @@ def load_checkpoint(
         learning_rate=learning_rate,
         global_step=global_step,
         version=version,
+    )
+
+
+def remove_optimizer_from_checkpoint(
+    in_path: Path, out_path: Path,
+):
+    """Load model from a Torch checkpoint and remove optimizer weights"""
+    checkpoint_dict = torch.load(in_path, map_location="cpu")
+
+    checkpoint_dict.pop("optimizer", None)
+
+    torch.save(checkpoint_dict, str(out_path))
+
+
+# -----------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    remove_optimizer_from_checkpoint(
+        in_path=Path(sys.argv[1]), out_path=Path(sys.argv[2])
     )
