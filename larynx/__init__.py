@@ -8,7 +8,6 @@ from pathlib import Path
 import gruut
 import gruut_ipa
 import numpy as np
-import onnxruntime
 
 import phonemes2ids
 from larynx.audio import AudioSettings
@@ -21,7 +20,16 @@ from larynx.constants import (
     VocoderQuality,
     VocoderType,
 )
-from larynx.utils import resolve_lang, resolve_voice_name, split_voice_name
+from larynx.utils import (
+    DEFAULT_VOICE_URL_FORMAT,
+    download_voice,
+    get_voice_download_name,
+    get_voices_dirs,
+    resolve_lang,
+    resolve_voice_name,
+    split_voice_name,
+    valid_voice_dir,
+)
 
 _LOGGER = logging.getLogger("larynx")
 
@@ -36,31 +44,71 @@ _VOCODER_MODEL_CACHE = {}
 
 
 def get_tts_model(
-    name: str = "", lang: str = "en-us", use_cuda: bool = False, half: bool = True
+    name: str = "",
+    lang: str = "en-us",
+    use_cuda: bool = False,
+    half: bool = True,
+    url_format: str = DEFAULT_VOICE_URL_FORMAT,
+    custom_voices_dir: typing.Optional[typing.Union[str, Path]] = None,
 ) -> typing.Optional[TextToSpeechModel]:
     resolved_name = resolve_voice_name(name or resolve_lang(lang))
-    maybe_model = _TTS_MODEL_CACHE.get(resolved_name)
-    if maybe_model is None:
-        # TODO: Fix
-        voice_lang, voice_name, voice_model_type = split_voice_name(resolved_name)
-        model_path = Path("local") / voice_lang / f"{voice_name}-{voice_model_type}"
 
-        with open(model_path / "phonemes.txt", "r", encoding="utf-8") as phonemes_file:
+    # Try to load model from cache first
+    maybe_model = _TTS_MODEL_CACHE.get(resolved_name)
+
+    if maybe_model is None:
+        # Search for the voice
+        model_dir: typing.Optional[Path] = None
+
+        voice_lang, voice_name, voice_model_type = split_voice_name(resolved_name)
+        voice_dir_name = f"{voice_name}-{voice_model_type}"
+
+        # Directories to search for voices/vocoders
+        voices_dirs = get_voices_dirs(custom_voices_dir)
+
+        # Use directory under language first
+        for voices_dir in voices_dirs:
+            maybe_model_dir = voices_dir / voice_lang / voice_dir_name
+            if valid_voice_dir(maybe_model_dir):
+                model_dir = maybe_model_dir
+                break
+
+        if model_dir is None:
+            # Search for voice in all directories
+            for voices_dir in voices_dirs:
+                for maybe_model_dir in voices_dir.rglob(resolved_name):
+                    if valid_voice_dir(maybe_model_dir):
+                        model_dir = maybe_model_dir
+                        break
+
+        if model_dir is None:
+            # Download the voice
+            url_voice = get_voice_download_name(resolved_name)
+            assert url_voice is not None, f"No download name for voice {resolved_name}"
+
+            url = url_format.format(voice=url_voice)
+            model_dir = download_voice(resolved_name, voices_dirs[0], url)
+
+        assert model_dir is not None, f"Voice not found: {resolved_name}"
+        _LOGGER.debug("Using voice at %s", model_dir)
+
+        # Load phonemes
+        with open(model_dir / "phonemes.txt", "r", encoding="utf-8") as phonemes_file:
             phoneme_to_id = phonemes2ids.load_phoneme_ids(phonemes_file)
 
-        config_path = model_path / "config.json"
+        # Load audio config
+        config_path = model_dir / "config.json"
         _LOGGER.debug("Loading audio settings from %s", config_path)
         with open(config_path, "r", encoding="utf-8") as config_file:
             config = json.load(config_file)
             audio_settings = AudioSettings(**config["audio"])
 
+        # Load checkpoint
         model = load_tts_model(
-            voice_model_type, model_path, use_cuda=use_cuda, half=half
+            voice_model_type, model_dir, use_cuda=use_cuda, half=half
         )
         setattr(model, "phoneme_to_id", phoneme_to_id)
         setattr(model, "audio_settings", audio_settings)
-
-        # Load phonemes
 
         # Cache
         _TTS_MODEL_CACHE[resolved_name] = model
@@ -90,14 +138,40 @@ def get_vocoder_model(
     use_cuda: bool = False,
     half: bool = False,
     denoiser_strength: float = 0.0,
+    url_format: str = DEFAULT_VOICE_URL_FORMAT,
+    custom_voices_dir: typing.Optional[typing.Union[str, Path]] = None,
 ) -> typing.Optional[TextToSpeechModel]:
+    # Try to load model from cache first
     maybe_model = _VOCODER_MODEL_CACHE.get(quality)
+
     if maybe_model is None:
-        model_name = _VOCODER_QUALITY.get(quality, _VOCODER_QUALITY["high"])
-        model_path = Path("local") / model_name
+        # Search for the vocoder
+        model_dir: typing.Optional[Path] = None
+        model_type, model_name = _VOCODER_QUALITY.get(
+            quality, _VOCODER_QUALITY["high"]
+        ).split("/", maxsplit=1)
+
+        # Directories to search for voices/vocoders
+        voices_dirs = get_voices_dirs(custom_voices_dir)
+
+        # Use directory under language first
+        for voices_dir in voices_dirs:
+            maybe_model_dir = voices_dir / model_type / model_name
+            if valid_voice_dir(maybe_model_dir):
+                model_dir = maybe_model_dir
+                break
+
+        if model_dir is None:
+            # Download the vocoder
+            url = url_format.format(voice=f"{model_type}_{model_name}")
+            model_dir = download_voice(model_name, voices_dirs[0], url)
+
+        assert model_dir is not None, f"Vocoder not found: {model_name}"
+        _LOGGER.debug("Using vocoder at %s", model_dir)
+
         model = load_vocoder_model(
             VocoderType.HIFI_GAN,
-            model_path,
+            model_dir,
             use_cuda=use_cuda,
             half=half,
             denoiser_strength=denoiser_strength,
@@ -121,28 +195,37 @@ def text_to_speech2(
     denoiser_strength: float = 0.0,
     use_cuda: bool = False,
     half: bool = False,
+    executor: typing.Optional[Executor] = None,
 ):
     resolved_name = resolve_voice_name(voice_or_lang)
     voice_lang, _voice_name, _voice_model_type = split_voice_name(resolved_name)
 
+    if executor is None:
+        executor = ThreadPoolExecutor()
+
     futures = {}
-    executor = ThreadPoolExecutor()
 
     for sentence in gruut.sentences(
         text, lang=voice_lang, ssml=ssml, explicit_lang=False
     ):
-        tts_model = get_tts_model(
-            sentence.voice or sentence.lang or resolved_name,
-            use_cuda=use_cuda,
-            half=half,
-        )
-        assert tts_model is not None
+        tts_model = None
+
+        # Try to load a TTS model for this sentence
+        for tts_voice_name in filter(
+            None, [sentence.voice, sentence.lang, resolved_name, voice_or_lang]
+        ):
+            tts_model = get_tts_model(tts_voice_name, use_cuda=use_cuda, half=half)
+            if tts_model is not None:
+                break
+
+        assert tts_model is not None, "Failed to load voice"
 
         vocoder_model = get_vocoder_model(
             quality, use_cuda=use_cuda, half=half, denoiser_strength=denoiser_strength
         )
-        assert vocoder_model is not None
+        assert vocoder_model is not None, "Failed to load vocoder"
 
+        # Convert text to phonemes
         phoneme_to_id = getattr(tts_model, "phoneme_to_id", {})
         audio_settings = getattr(tts_model, "audio_settings", None)
         if audio_settings is None:
@@ -160,6 +243,7 @@ def text_to_speech2(
 
         _LOGGER.debug("%s %s %s", sentence.text, sent_phonemes, sent_phoneme_ids)
 
+        # Convert phonemes to audio
         future = executor.submit(
             _sentence_task,
             np.array(sent_phoneme_ids, dtype=np.int64),

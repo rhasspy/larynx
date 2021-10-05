@@ -16,8 +16,9 @@ _ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
 
 # Format string for downloading voices
 DEFAULT_VOICE_URL_FORMAT = (
-    "http://github.com/rhasspy/larynx/releases/download/2021-03-28/{voice}.tar.gz"
+    "http://localhost:5000/rhasspy/larynx/releases/download/v1.0.0/{voice}.tar.gz"
 )
+# "http://github.com/rhasspy/larynx/releases/download/v1.0.0/{voice}.tar.gz"
 
 # Directory names that contain vocoders instead of voices
 VOCODER_DIR_NAMES = set(v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM)
@@ -176,9 +177,9 @@ def get_voices_dirs(
 
 
 def valid_voice_dir(voice_dir: typing.Union[str, Path]) -> bool:
-    """Return True if directory exists and has an onnx file"""
+    """Return True if directory exists and has a checkpoint file"""
     voice_dir = Path(voice_dir)
-    return voice_dir.is_dir() and (len(list(voice_dir.glob("*.onnx"))) > 0)
+    return voice_dir.is_dir() and (len(list(voice_dir.glob("*.pth"))) > 0)
 
 
 def get_runtime_dir() -> Path:

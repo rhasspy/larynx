@@ -54,9 +54,6 @@ def main2():
     """Main entry point"""
     args = get_args()
 
-    import warnings
-    warnings.filterwarnings("error")
-
     if args.cuda:
         import torch
 
@@ -65,22 +62,192 @@ def main2():
             args.half = False
             _LOGGER.warning("CUDA is not available")
 
-    import numpy as np
-    from larynx import text_to_speech2
-    from .wavfile import write as wav_write
+    # Read text from stdin or arguments
+    if args.text:
+        # Use arguments
+        texts = args.text
+    else:
+        # Use stdin
+        texts = sys.stdin
 
-    all_audios = []
-    for text in args.text:
-        for _text, audio in text_to_speech2(
-            text,
-            voice_or_lang=args.voice,
-            ssml=args.ssml,
-            quality=args.quality,
-            use_cuda=args.cuda,
-            half=args.half,
-            denoiser_strength=args.denoiser_strength,
-        ):
-            all_audios.append(audio)
+        if os.isatty(sys.stdin.fileno()):
+            print("Reading text from stdin...", file=sys.stderr)
+
+    if args.process_on_blank_line:
+
+        # Combine text until a blank line is encountered.
+        # Good for line-wrapped books where
+        # sentences are broken
+        # up across multiple
+        # lines.
+        def process_on_blank_line(lines):
+            text = ""
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    if text:
+                        yield text
+
+                    text = ""
+                    continue
+
+                text += " " + line
+
+        texts = process_on_blank_line(texts)
+
+    # -------------------------------------------------------------------------
+
+    import numpy as np
+
+    from larynx import text_to_speech2
+    from larynx.wavfile import write as wav_write
+
+    max_thread_workers: typing.Optional[int] = None
+
+    if args.max_thread_workers is not None:
+        max_thread_workers = (
+            None if args.max_thread_workers < 1 else args.max_thread_workers
+        )
+    elif args.raw_stream:
+        # Faster time to first audio
+        max_thread_workers = 2
+
+    executor = ThreadPoolExecutor(max_workers=max_thread_workers)
+
+    if os.isatty(sys.stdout.fileno()):
+        if (not args.output_dir) and (not args.raw_stream):
+            # No where else for the audio to go
+            args.interactive = True
+
+    # Raw stream queue
+    raw_queue: typing.Optional["Queue[bytes]"] = None
+    raw_stream_thread: typing.Optional[threading.Thread] = None
+
+    if args.raw_stream:
+        # Output in a separate thread to avoid blocking audio processing
+        raw_queue = Queue(maxsize=args.raw_stream_queue_size)
+
+        def output_raw_stream():
+            while True:
+                audio = raw_queue.get()
+                if audio is None:
+                    break
+
+                _LOGGER.debug(
+                    "Writing %s byte(s) of 16-bit 22050Hz mono PCM to stdout",
+                    len(audio),
+                )
+                sys.stdout.buffer.write(audio)
+                sys.stdout.buffer.flush()
+
+        raw_stream_thread = threading.Thread(target=output_raw_stream, daemon=True)
+        raw_stream_thread.start()
+
+    all_audios: typing.List[np.ndarray] = []
+    wav_data: typing.Optional[bytes] = None
+    play_command = shlex.split(args.play_command)
+
+    # -------------------
+    # Process input lines
+    # -------------------
+    start_time_to_first_audio = time.perf_counter()
+
+    try:
+        for line in texts:
+            line_id = ""
+            line = line.strip()
+            if not line:
+                continue
+
+            text_and_audios = text_to_speech2(
+                text=line,
+                voice_or_lang=args.voice,
+                ssml=args.ssml,
+                quality=args.quality,
+                use_cuda=args.cuda,
+                half=args.half,
+                denoiser_strength=args.denoiser_strength,
+                executor=executor,
+            )
+
+            text_id = ""
+
+            for text_idx, (text, audio) in enumerate(text_and_audios):
+                if text_idx == 0:
+                    end_time_to_first_audio = time.perf_counter()
+                    _LOGGER.debug(
+                        "Seconds to first audio: %s",
+                        end_time_to_first_audio - start_time_to_first_audio,
+                    )
+
+                if args.raw_stream:
+                    assert raw_queue is not None
+                    raw_queue.put(audio.tobytes())
+                elif args.interactive or args.output_dir:
+                    # Convert to WAV audio
+                    with io.BytesIO() as wav_io:
+                        wav_write(wav_io, args.sample_rate, audio)
+                        wav_data = wav_io.getvalue()
+
+                    assert wav_data is not None
+
+                    if args.interactive:
+
+                        # Play audio
+                        _LOGGER.debug("Playing audio with play command")
+                        subprocess.run(
+                            play_command,
+                            input=wav_data,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=True,
+                        )
+
+                    if args.output_dir:
+                        # Determine file name
+                        if args.output_naming == OutputNaming.TEXT:
+                            # Use text itself
+                            file_name = text.replace(" ", "_")
+                            file_name = file_name.translate(
+                                str.maketrans(
+                                    "", "", string.punctuation.replace("_", "")
+                                )
+                            )
+                        elif args.output_naming == OutputNaming.TIME:
+                            # Use timestamp
+                            file_name = str(time.time())
+                        elif args.output_naming == OutputNaming.ID:
+                            if not text_id:
+                                text_id = line_id
+                            else:
+                                text_id = f"{line_id}_{text_idx + 1}"
+
+                            file_name = text_id
+
+                        assert file_name, f"No file name for text: {text}"
+                        wav_path = args.output_dir / (file_name + ".wav")
+                        with open(wav_path, "wb") as wav_file:
+                            wav_write(wav_file, args.sample_rate, audio)
+
+                        _LOGGER.debug("Wrote %s", wav_path)
+                else:
+                    # Combine all audio and output to stdout at the end
+                    all_audios.append(audio)
+
+    except KeyboardInterrupt:
+        if raw_queue is not None:
+            # Draw audio playback queue
+            while not raw_queue.empty():
+                raw_queue.get()
+    finally:
+        # Wait for raw stream to finish
+        if raw_queue is not None:
+            raw_queue.put(None)
+
+        if raw_stream_thread is not None:
+            raw_stream_thread.join()
+
+    # -------------------------------------------------------------------------
 
     # Write combined audio to stdout
     if all_audios:

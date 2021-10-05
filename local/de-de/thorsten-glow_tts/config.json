@@ -1,7 +1,7 @@
 {
     "seed": 1234,
     "epochs": 10000,
-    "learning_rate": 0.00026855278715645745,
+    "learning_rate": 0.0006414812925280469,
     "betas": [
         0.9,
         0.98
@@ -12,6 +12,8 @@
     "scheduler": "noam",
     "batch_size": 32,
     "fp16_run": false,
+    "min_seq_length": null,
+    "max_seq_length": 200,
     "audio": {
         "filter_length": 1024,
         "hop_length": 256,
@@ -22,9 +24,13 @@
         "channels": 1,
         "mel_fmin": 0.0,
         "mel_fmax": 8000.0,
-        "signal_norm": false,
-        "convert_db_to_amp": false,
-        "do_dynamic_range_compression": false
+        "ref_level_db": 20.0,
+        "spec_gain": 1.0,
+        "signal_norm": true,
+        "min_level_db": -100.0,
+        "max_norm": 1.0,
+        "clip_norm": true,
+        "symmetric_norm": true
     },
     "model": {
         "num_symbols": 54,
@@ -50,8 +56,9 @@
         "n_split": 4,
         "sigmoid_scale": false,
         "block_length": null,
-        "gin_channels": 0
+        "gin_channels": 0,
+        "n_frames_per_step": 1
     },
     "version": 1,
-    "git_commit": "a303dc3"
+    "git_commit": "b05e772"
 }
