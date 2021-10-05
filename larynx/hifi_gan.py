@@ -20,7 +20,7 @@ _LOGGER = logging.getLogger("hifi_gan")
 
 class HiFiGanVocoder(VocoderModel):
     def __init__(self, config: VocoderModelConfig, executor: typing.Optional[Executor]):
-        super(HiFiGanVocoder, self).__init__(config)
+        super().__init__(config)
 
         self.use_cuda = config.use_cuda
         self.half = config.half
@@ -50,7 +50,10 @@ class HiFiGanVocoder(VocoderModel):
         checkpoint = load_checkpoint(
             generator_path, self.config, use_cuda=config.use_cuda
         )
-        self.model = checkpoint.training_model.generator
+
+        assert checkpoint.training_model.generator is not None
+
+        self.model: Generator = checkpoint.training_model.generator
 
         if config.half:
             self.model.half()

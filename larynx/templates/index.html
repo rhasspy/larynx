@@ -42,7 +42,7 @@
             </div>
             <div class="row mt-3">
                 <div class="col">
-                    <textarea id="text" placeholder="Type here..." class="form-control" rows="3" name="text"></textarea>
+                    <textarea id="text" placeholder="Type here..." class="form-control" rows="8" name="text"></textarea>
                 </div>
                 <div class="col-auto">
                     <button id="speak-button" name="speak" class="btn btn-lg btn-primary">Speak</button>
@@ -64,6 +64,10 @@
                     </select>
                 </div>
                 <div class="col-auto">
+                  <input type="checkbox" id="ssml">
+                  <label class="ml-1" for="ssml">SSML</label>
+                </div>
+                <div class="col-auto">
                     <button id="download" class="btn btn-sm btn-success" title="Download more voices" hidden>Download</button>
                 </div>
             </div>
@@ -82,29 +86,6 @@
                         <input type="number" id="noise-scale" name="noiseScale" size="5" min="0" max="1" step="0.001" value="0.333">
                         <label for="length-scale" class="ml-2" title="Voice speed (< 1 is faster)">Length:</label>
                         <input type="number" id="length-scale" name="lengthScale" size="5" min="0" step="0.001" value="1">
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-auto">
-                        <label for="text-language" title="Text language">Text Language:</label>
-                        <input type="text" id="text-language" name="language" placeholder="voice language">
-                    </div>
-                    <div class="col-auto">
-                        <p>(empty = use voice language)
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-auto">
-                        <input type="checkbox" id="inline-pronunciations" checked>
-                        <label for="inline-pronunciations" class="col-form-label" title="Phonemes inside [[ brackets ]] are spoken literally. Words/segments in {% raw %}{{ cur{ly} braces }}{% endraw %} are combined">Enable inline <tt>[[phonemes]] or {% raw %}{{w{or}ds}}{% endraw %}</tt></label>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col">
-                        <input type="text" id="phonemes-word" placeholder="word">
-                        <button class="btn btn-secondary ml-2" id="get-phonemes" title="Get phonetic pronunciation for word">Get Phonemes</button>
-                        <span id="word-phonemes" class="ml-3"></span>
-                        <select id="word-phonemes-index" class="ml-2" hidden></select>
                     </div>
                 </div>
                 <div class="row mt-3">
@@ -178,8 +159,7 @@
              var denoiserStrength = q('#denoiser-strength').value || '0'
              var noiseScale = q('#noise-scale').value || '0.333'
              var lengthScale = q('#length-scale').value || '1.0'
-             var textLanguage = q('#text-language').value || ''
-             var inlinePronunciations = q('#inline-pronunciations').checked ? 'true' : 'false'
+             var ssml = q('#ssml').value || 'false'
 
              q('#audio-message').hidden = false
 
@@ -192,8 +172,7 @@
                  '&denoiserStrength=' + encodeURIComponent(denoiserStrength) +
                  '&noiseScale=' + encodeURIComponent(noiseScale) +
                  '&lengthScale=' + encodeURIComponent(lengthScale) +
-                 '&textLanguage=' + encodeURIComponent(textLanguage) +
-                 '&inlinePronunciations=' + encodeURIComponent(inlinePronunciations),
+                 '&ssml=' + encodeURIComponent(ssml),
                  {cache: 'no-cache'})
 
              if (res.ok) {
@@ -210,53 +189,6 @@
                  q('#speak-button').disabled = false
              }
          }
-
-         q('#phonemes-word').addEventListener('keyup', function(e) {
-             if (e.keyCode == 13) {
-                 // Click "Get Phonemes" button on enter
-                 q('#get-phonemes').click()
-             }
-         })
-
-         q('#get-phonemes').addEventListener('click', async function() {
-             q('#word-phonemes').textContent = ''
-
-             var wordPhonemesIndex = q('#word-phonemes-index')
-             wordPhonemesIndex.hidden = true
-             for (var i = wordPhonemesIndex.options.length - 1; i >= 0; i--) {
-                 wordPhonemesIndex.options[i].remove()
-             }
-
-             // Get phonetic pronunciations for a word
-             var language = get_language()
-             var word = q('#phonemes-word').value
-
-             res = await fetch(
-                 'api/word-phonemes?word=' + encodeURIComponent(word) +
-                 '&language=' + encodeURIComponent(language))
-
-             if (res.ok) {
-                 phonemes = await res.json()
-
-                 for (var i = 0; i < phonemes.length; i++) {
-                     var phonemesStr = '[[ ' + phonemes[i].join(' ') + ' ]]'
-                     wordPhonemesIndex.insertAdjacentHTML(
-                         'beforeend', '<option value="' + phonemesStr + '">' + (i+1).toString() + '</option>'
-                     )
-
-                     if (i == 0) {
-                         q('#word-phonemes').textContent = phonemesStr
-                     }
-                 }
-
-                 wordPhonemesIndex.selectedIndex = 0
-                 wordPhonemesIndex.hidden = false
-             } else {
-                 message = await res.text()
-                 q('#message').textContent = message
-                 q('#speak-button').disabled = false
-             }
-         })
 
          function voiceChanged() {
              var voiceList = q('#voice-list')
@@ -285,12 +217,6 @@
          }
 
          q('#voice-list').addEventListener('change', voiceChanged)
-
-         q('#word-phonemes-index').addEventListener('change', function() {
-             var wordPhonemesIndex = q('#word-phonemes-index')
-             var phonemes = wordPhonemesIndex.options[wordPhonemesIndex.selectedIndex].value
-             q('#word-phonemes').textContent = phonemes
-         })
 
          function loadVoices() {
              voicesInfo = {}

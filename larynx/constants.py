@@ -9,7 +9,7 @@ from pathlib import Path
 if typing.TYPE_CHECKING:
     # Only import here if type checking
     import numpy as np
-    import onnxruntime
+    import torch
 
 # -----------------------------------------------------------------------------
 
@@ -58,7 +58,7 @@ class TextToSpeechModel(ABC):
 
     def phonemes_to_mels(
         self, phoneme_ids: np.ndarray, settings: typing.Optional[SettingsType] = None
-    ) -> np.ndarray:
+    ) -> torch.Tensor:
         """Convert phoneme ids to mel spectrograms"""
         pass
 
@@ -83,7 +83,19 @@ class VocoderModel(ABC):
         pass
 
     def mels_to_audio(
-        self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
+        self, mels: torch.Tensor, settings: typing.Optional[SettingsType] = None
     ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
         pass
+
+
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class TextToSpeechResult:
+    """Result from larynx.text_to_speech"""
+
+    text: str
+    audio: typing.Optional[np.ndarray]
+    sample_rate: int

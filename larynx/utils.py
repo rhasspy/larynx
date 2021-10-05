@@ -16,13 +16,18 @@ _ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
 
 # Format string for downloading voices
 DEFAULT_VOICE_URL_FORMAT = (
-    "http://localhost:5000/rhasspy/larynx/releases/download/v1.0.0/{voice}.tar.gz"
+    "http://github.com/rhasspy/larynx/releases/download/v1.0.0/{voice}.tar.gz"
 )
-# "http://github.com/rhasspy/larynx/releases/download/v1.0.0/{voice}.tar.gz"
 
 # Directory names that contain vocoders instead of voices
 VOCODER_DIR_NAMES = set(v.value for v in VocoderType if v != VocoderType.GRIFFIN_LIM)
 
+# Quality name to vocoder name
+VOCODER_QUALITY: typing.Dict[str, str] = {
+    "high": "hifi_gan/universal_large",
+    "medium": "hifi_gan/vctk_medium",
+    "low": "hifi_gan/vctk_small",
+}
 
 # alias -> full name
 VOICE_ALIASES: typing.Dict[str, str] = {}
@@ -35,7 +40,7 @@ def load_voices_aliases():
     """Load voice aliases from VOICES file"""
     if not VOICE_ALIASES:
         # Load voice aliases
-        with open(_DIR / "VOICES", "r") as voices_file:
+        with open(_DIR / "VOICES", "r", encoding="utf-8") as voices_file:
             for line in voices_file:
                 line = line.strip()
                 if not line:
@@ -65,14 +70,6 @@ def split_voice_name(voice_name: str) -> typing.Tuple[str, str, str]:
     return lang, name, model_type
 
 
-def resolve_lang(lang: str) -> str:
-    lang = lang.lower()
-    if "_" in lang:
-        lang = "-".join(lang.split("_", maxsplit=1))
-
-    return lang
-
-
 def get_voice_download_name(voice_name: str) -> str:
     """Get name of .tar.gz file name for voice (without extension)"""
     voice_name = resolve_voice_name(voice_name)
@@ -95,52 +92,51 @@ def download_voice(
         "Downloading voice/vocoder for %s to %s from %s", voice_name, voices_dir, link
     )
 
-    response = urllib.request.urlopen(link)
-
-    with tempfile.NamedTemporaryFile(mode="wb+", suffix=".tar.gz") as temp_file:
-        with tqdm(
-            unit="B",
-            unit_scale=True,
-            unit_divisor=1024,
-            miniters=1,
-            desc=voice_name,
-            total=int(response.headers.get("content-length", 0)),
-        ) as pbar:
-            chunk = response.read(4096)
-            while chunk:
-                temp_file.write(chunk)
-                pbar.update(len(chunk))
+    with urllib.request.urlopen(link) as response:
+        with tempfile.NamedTemporaryFile(mode="wb+", suffix=".tar.gz") as temp_file:
+            with tqdm(
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                miniters=1,
+                desc=voice_name,
+                total=int(response.headers.get("content-length", 0)),
+            ) as pbar:
                 chunk = response.read(4096)
+                while chunk:
+                    temp_file.write(chunk)
+                    pbar.update(len(chunk))
+                    chunk = response.read(4096)
 
-        temp_file.seek(0)
+            temp_file.seek(0)
 
-        # Extract
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            _LOGGER.debug("Extracting %s to %s", temp_file.name, temp_dir_str)
-            shutil.unpack_archive(temp_file.name, temp_dir_str)
+            # Extract
+            with tempfile.TemporaryDirectory() as temp_dir_str:
+                temp_dir = Path(temp_dir_str)
+                _LOGGER.debug("Extracting %s to %s", temp_file.name, temp_dir_str)
+                shutil.unpack_archive(temp_file.name, temp_dir_str)
 
-            # Expecting <language>/<voice_name>
-            lang_dir = next(temp_dir.iterdir())
-            assert lang_dir.is_dir()
+                # Expecting <language>/<voice_name>
+                lang_dir = next(temp_dir.iterdir())
+                assert lang_dir.is_dir()
 
-            voice_dir = next(lang_dir.iterdir())
-            assert voice_dir.is_dir()
+                voice_dir = next(lang_dir.iterdir())
+                assert voice_dir.is_dir()
 
-            # Copy to destination
-            dest_lang_dir = voices_dir / lang_dir.name
-            dest_lang_dir.mkdir(parents=True, exist_ok=True)
+                # Copy to destination
+                dest_lang_dir = voices_dir / lang_dir.name
+                dest_lang_dir.mkdir(parents=True, exist_ok=True)
 
-            dest_voice_dir = voices_dir / lang_dir.name / voice_dir.name
-            if dest_voice_dir.is_dir():
-                # Delete existing files
-                shutil.rmtree(str(dest_voice_dir))
+                dest_voice_dir = voices_dir / lang_dir.name / voice_dir.name
+                if dest_voice_dir.is_dir():
+                    # Delete existing files
+                    shutil.rmtree(str(dest_voice_dir))
 
-            # Move files
-            _LOGGER.debug("Moving %s to %s", voice_dir, dest_voice_dir)
-            shutil.move(str(voice_dir), str(dest_voice_dir))
+                # Move files
+                _LOGGER.debug("Moving %s to %s", voice_dir, dest_voice_dir)
+                shutil.move(str(voice_dir), str(dest_voice_dir))
 
-            return dest_voice_dir
+                return dest_voice_dir
 
 
 # -----------------------------------------------------------------------------

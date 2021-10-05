@@ -5,18 +5,14 @@ import asyncio
 import contextlib
 import functools
 import io
-import json
 import logging
-import platform
 import signal
 import time
 import typing
-from collections import defaultdict
 from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
 
-import gruut
 import gruut_ipa
 import hypercorn
 import numpy as np
@@ -30,27 +26,21 @@ from quart import (
     request,
     send_from_directory,
 )
-from swagger_ui import quart_api_doc
+from swagger_ui import api_doc
 
-from . import (
-    TextToSpeechModel,
-    VocoderModel,
-    load_tts_model,
-    load_vocoder_model,
-    text_to_speech,
-)
-from .audio import AudioSettings
-from .utils import (
+from larynx import text_to_speech
+from larynx.constants import VocoderQuality
+from larynx.utils import (
     DEFAULT_VOICE_URL_FORMAT,
     VOCODER_DIR_NAMES,
+    VOCODER_QUALITY,
     VOICE_DOWNLOAD_NAMES,
     download_voice,
     get_voices_dirs,
     load_voices_aliases,
-    resolve_voice_name,
     valid_voice_dir,
 )
-from .wavfile import write as wav_write
+from larynx.wavfile import write as wav_write
 
 _DIR = Path(__file__).parent
 _WAV_DIR = _DIR / "wav"
@@ -85,12 +75,6 @@ parser.add_argument(
     help="Directory with <LANGUAGE>/<VOICE> structure (overrides LARYNX_VOICES_DIR env variable)",
 )
 parser.add_argument(
-    "--optimizations",
-    choices=["auto", "on", "off"],
-    default="auto",
-    help="Enable/disable Onnx optimizations (auto=disable on armv7l)",
-)
-parser.add_argument(
     "--quality",
     choices=["high", "medium", "low"],
     default="high",
@@ -122,14 +106,13 @@ parser.add_argument(
 parser.add_argument(
     "--pidfile", help="Path to pidfile. Exit if pidfile already exists."
 )
-parser.add_argument(
-    "--lexicon",
-    nargs=2,
-    action="append",
-    metavar=("language", "lexicon"),
-    help="Language and path to custom lexicon with format WORD PHONEME PHONEME ...",
-)
 parser.add_argument("--logfile", help="Path to logging file (default: stderr)")
+parser.add_argument("--cuda", action="store_true", help="Use CUDA if available")
+parser.add_argument(
+    "--half",
+    action="store_true",
+    help="Use faster FP16 for inference (requires --cuda)",
+)
 parser.add_argument(
     "--debug", action="store_true", help="Print DEBUG messages to console"
 )
@@ -149,13 +132,13 @@ if args.logfile:
 logging.basicConfig(**log_args)  # type: ignore
 _LOGGER.debug(args)
 
-setattr(args, "no_optimizations", False)
-if args.optimizations == "off":
-    args.no_optimizations = True
-elif args.optimizations == "auto":
-    if platform.machine() == "armv7l":
-        # Enabling optimizations on 32-bit ARM crashes
-        args.no_optimizations = True
+if args.cuda:
+    import torch
+
+    args.cuda = torch.cuda.is_available()
+    if not args.cuda:
+        args.half = False
+        _LOGGER.warning("CUDA is not available")
 
 voices_dirs = get_voices_dirs(args.voices_dir)
 load_voices_aliases()
@@ -173,26 +156,6 @@ app = quart_cors.cors(app)
 
 # -----------------------------------------------------------------------------
 
-_DEFAULT_AUDIO_SETTINGS = AudioSettings()
-
-_VOCODER_QUALITY = {
-    "high": "hifi_gan/universal_large",
-    "medium": "hifi_gan/vctk_medium",
-    "low": "hifi_gan/vctk_small",
-}
-
-# Set default vocoder based on quality
-_DEFAULT_VOCODER = _VOCODER_QUALITY[args.quality]
-
-# Caches
-_TTS_MODELS: typing.Dict[str, TextToSpeechModel] = {}
-_AUDIO_SETTINGS: typing.Dict[str, AudioSettings] = {}
-_VOCODER_MODELS: typing.Dict[str, VocoderModel] = {}
-_GRUUT_PHONEMIZER: typing.Dict[str, gruut.Phonemizer] = {}
-_PHONEME_TRANSFORM: typing.Dict[
-    typing.Tuple[str, str], typing.Callable[[str], str]
-] = {}
-
 
 async def text_to_wav(
     text: str,
@@ -201,119 +164,11 @@ async def text_to_wav(
     denoiser_strength: typing.Optional[float] = None,
     noise_scale: typing.Optional[float] = None,
     length_scale: typing.Optional[float] = None,
-    inline_pronunciations: bool = False,
-    text_lang: typing.Optional[str] = None,
+    ssml: bool = False,
 ) -> bytes:
     """Runs TTS for each line and accumulates all audio into a single WAV."""
-    language: typing.Optional[str] = None
-    voice_str = voice
-
-    if "/" in voice:
-        # <LANGUAGE>/<VOICE_NAME>-<TTS_SYSTEM>
-        language, voice_str = voice_str.split("/", maxsplit=1)
-
-    tts_model = _TTS_MODELS.get(voice)
-    if tts_model is None:
-        tts_model_dir: typing.Optional[Path] = None
-
-        if language is not None:
-            # Search by exact language/name
-            # <VOICES_DIR>/<LANGUAGE>/<VOICE>
-            for voices_dir in voices_dirs:
-                maybe_tts_model_dir = voices_dir / language / voice_str
-                if valid_voice_dir(maybe_tts_model_dir):
-                    tts_model_dir = maybe_tts_model_dir
-                    break
-
-        if tts_model_dir is None:
-            # Search for voice in all directories
-            voice_str = resolve_voice_name(voice_str)
-
-            # <VOICES_DIR>/<LANGUAGE>/<VOICE>
-            found_voice = False
-            for voices_dir in voices_dirs:
-                if not voices_dir.is_dir():
-                    continue
-
-                # <LANGUAGE>
-                for lang_dir in voices_dir.iterdir():
-                    if not lang_dir.is_dir():
-                        continue
-
-                    # <VOICE>
-                    for maybe_tts_model_dir in lang_dir.iterdir():
-                        if not maybe_tts_model_dir.is_dir():
-                            continue
-
-                        if (maybe_tts_model_dir.name == voice_str) and valid_voice_dir(
-                            maybe_tts_model_dir
-                        ):
-                            tts_model_dir = maybe_tts_model_dir
-                            language = lang_dir.name
-                            found_voice = True
-                            break
-
-                    if found_voice:
-                        break
-
-                if found_voice:
-                    break
-
-        assert tts_model_dir is not None, f"Voice '{voice}' not found in {voices_dirs}"
-        assert language is not None, f"Language not set for {voice}"
-
-        # Load TTS model
-        _voice_name, tts_system = voice_str.split("-", maxsplit=1)
-        tts_model = load_tts_model(
-            model_type=tts_system,
-            model_path=tts_model_dir,
-            no_optimizations=args.no_optimizations,
-        )
-        setattr(tts_model, "language", language)
-
-        _TTS_MODELS[voice] = tts_model
-        _TTS_MODELS[voice_str] = tts_model
-
-        # Load audio settings
-        tts_config_path = tts_model_dir / "config.json"
-        if tts_config_path.is_file():
-            _LOGGER.debug("Loading audio settings from %s", tts_config_path)
-            with open(tts_config_path, "r") as tts_config_file:
-                tts_config = json.load(tts_config_file)
-                _AUDIO_SETTINGS[voice] = AudioSettings(**tts_config["audio"])
-        else:
-            _LOGGER.warning(
-                "No config file found at %s, using default audio settings",
-                tts_config_path,
-            )
-
-    audio_settings = _AUDIO_SETTINGS.get(voice, _DEFAULT_AUDIO_SETTINGS)
-
-    # Load vocoder
-
-    # <VOCODER_SYSTEM>/<MODEL_NAME>
-    vocoder_model = _VOCODER_MODELS.get(vocoder)
-    if vocoder_model is None:
-        vocoder_system, vocoder_name = vocoder.split("/", maxsplit=1)
-
-        # Load vocoder
-        vocoder_model_path: typing.Optional[Path] = None
-        for voices_dir in voices_dirs:
-            maybe_vocoder_model_path = voices_dir / vocoder_system / vocoder_name
-            if valid_voice_dir(maybe_vocoder_model_path):
-                vocoder_model_path = maybe_vocoder_model_path
-                break
-
-        assert (
-            vocoder_model_path is not None
-        ), f"Vocoder '{vocoder}' not found in {voices_dirs}"
-
-        vocoder_model = load_vocoder_model(
-            model_type=vocoder_system,
-            model_path=vocoder_model_path,
-            no_optimizations=args.no_optimizations,
-        )
-        _VOCODER_MODELS[vocoder] = vocoder_model
+    # <lang>/<voice> -> <lang>_<voice>
+    voice = voice.replace("/", "_")
 
     # Settings
     tts_settings = None
@@ -329,81 +184,34 @@ async def text_to_wav(
     if denoiser_strength is not None:
         vocoder_settings = {"denoiser_strength": denoiser_strength}
 
-    # Phonemizer
-    phoneme_lang: str = tts_model.language  # type: ignore
-
-    if not text_lang:
-        text_lang = phoneme_lang
-
-    phonemizer = get_phonemizer(text_lang)
-    phoneme_transform: typing.Optional[typing.Callable[[str], str]] = None
-
-    if text_lang != phoneme_lang:
-        phoneme_transform = _PHONEME_TRANSFORM.get((text_lang, phoneme_lang))
-        if phoneme_transform is None:
-            from gruut_ipa import Phoneme, Phonemes
-            from gruut_ipa.accent import guess_phonemes
-
-            # Guess phoneme map
-            from_phonemes, to_phonemes = (
-                Phonemes.from_language(text_lang),
-                Phonemes.from_language(phoneme_lang),
-            )
-
-            phoneme_map = {
-                from_p.text: [
-                    to_p.text
-                    for to_p in typing.cast(
-                        typing.List[Phoneme], guess_phonemes(from_p, to_phonemes)
-                    )
-                ]
-                for from_p in from_phonemes
-            }
-
-            _LOGGER.debug(
-                "Guessed phoneme map from %s to %s: %s",
-                text_lang,
-                phoneme_lang,
-                phoneme_map,
-            )
-
-            def phoneme_map_transform(p):
-                return phoneme_map.get(p, p)
-
-            phoneme_transform = phoneme_map_transform
-
-            # Cache for later
-            _PHONEME_TRANSFORM[(text_lang, phoneme_lang)] = phoneme_transform
-
     # Synthesize each line separately.
     # Accumulate into a single WAV file.
     _LOGGER.info("Synthesizing with %s, %s (%s char(s))...", voice, vocoder, len(text))
     start_time = time.time()
 
-    text_and_audios = await _LOOP.run_in_executor(
+    tts_results = await _LOOP.run_in_executor(
         None,
         functools.partial(
             text_to_speech,
             text=text,
-            lang=phoneme_lang,
-            text_lang=text_lang,
-            tts_model=tts_model,
-            vocoder_model=vocoder_model,
-            audio_settings=audio_settings,
+            voice_or_lang=voice,
+            vocoder_or_quality=vocoder,
             tts_settings=tts_settings,
             vocoder_settings=vocoder_settings,
-            inline_pronunciations=inline_pronunciations,
-            phonemizer=phonemizer,
-            phoneme_transform=phoneme_transform,
+            use_cuda=args.cuda,
+            half=args.half,
+            ssml=ssml,
         ),
     )
 
     audios = []
-    for _, audio in text_and_audios:
-        audios.append(audio)
+    sample_rate = 22050
+    for result in tts_results:
+        sample_rate = result.sample_rate
+        audios.append(result.audio)
 
     with io.BytesIO() as wav_io:
-        wav_write(wav_io, audio_settings.sample_rate, np.concatenate(audios))
+        wav_write(wav_io, sample_rate, np.concatenate(audios))
         wav_bytes = wav_io.getvalue()
 
     end_time = time.time()
@@ -522,17 +330,16 @@ async def app_vocoders() -> Response:
     return jsonify(vocoders)
 
 
+def convert_bool(bool_str: str) -> bool:
+    """Convert HTML input string to boolean"""
+    return bool_str.strip().lower() in {"true", "yes", "on", "1", "enable"}
+
+
 @app.route("/api/tts", methods=["GET", "POST"])
 async def app_say() -> Response:
     """Speak text to WAV."""
     voice = request.args.get("voice", "")
     assert voice, "No voice provided"
-
-    # If true, [[ phonemes ]] in brackets are spoken literally.
-    # Additionally, {{ par{tial} word{s} }} can be used.
-    inline_pronunciations = request.args.get(
-        "inlinePronunciations", ""
-    ).strip().lower() in {"true", "1"}
 
     # TTS settings
     noise_scale = request.args.get("noiseScale", args.noise_scale)
@@ -543,19 +350,17 @@ async def app_say() -> Response:
     if length_scale is not None:
         length_scale = float(length_scale)
 
-    text_lang = request.args.get("textLanguage", "").strip()
-    if text_lang:
-        text_lang = gruut.resolve_lang(text_lang)
+    ssml = convert_bool(request.args.get("ssml", ""))
 
     # Text can come from POST body or GET ?text arg
     if request.method == "POST":
         text = (await request.data).decode()
     else:
-        text = request.args.get("text")
+        text = request.args.get("text", "")
 
     assert text, "No text provided"
 
-    vocoder = request.args.get("vocoder", _DEFAULT_VOCODER)
+    vocoder = request.args.get("vocoder", VocoderQuality.HIGH)
 
     # Vocoder settings
     denoiser_strength = request.args.get("denoiserStrength", args.denoiser_strength)
@@ -569,8 +374,7 @@ async def app_say() -> Response:
         denoiser_strength=denoiser_strength,
         noise_scale=noise_scale,
         length_scale=length_scale,
-        inline_pronunciations=inline_pronunciations,
-        text_lang=text_lang,
+        ssml=ssml,
     )
 
     return Response(wav_bytes, mimetype="audio/wav")
@@ -607,10 +411,10 @@ async def api_phonemes():
         elif phoneme.schwa:
             if phoneme.schwa.r_coloured:
                 # Close enough to "r" (er in corn[er])
-                wav_path = _WAV_DIR / f"alveolar_approximant.wav"
+                wav_path = _WAV_DIR / "alveolar_approximant.wav"
             else:
                 # ə
-                wav_path = _WAV_DIR / f"mid-central_vowel.wav"
+                wav_path = _WAV_DIR / "mid-central_vowel.wav"
 
         phoneme_dict = {"example": phoneme.example}
 
@@ -629,28 +433,6 @@ async def api_phonemes():
     #   }
     # }
     return jsonify(phonemes)
-
-
-@app.route("/api/word-phonemes", methods=["GET", "POST"])
-async def api_word_phonemes():
-    """Get phonemes for a word"""
-    if request.method == "POST":
-        word = (await request.data).decode()
-    else:
-        word = request.args.get("word", "")
-
-    assert word, "No word given"
-
-    language = request.args.get("language", "en-us")
-    phonemizer = get_phonemizer(language)
-
-    pron_phonemes: typing.List[typing.List[str]] = []
-
-    _LOGGER.debug("Looking up in %s lexicon: %s", language, word)
-    prons = next(phonemizer.phonemize([word]))
-    pron_phonemes = [prons]
-
-    return jsonify(pron_phonemes)
 
 
 @app.route("/api/download", methods=["GET"])
@@ -680,10 +462,14 @@ async def api_process():
     if request.method == "POST":
         data = parse_qs((await request.data).decode())
         text = data.get("INPUT_TEXT", [""])[0]
-        voice = data.get("VOICE", [""])[0]
+
+        if "VOICE" in data:
+            voice = data.get("VOICE", [""])[0]
+        else:
+            voice = data.get("LOCALE", [""])[0]
     else:
         text = request.args.get("INPUT_TEXT", "")
-        voice = request.args.get("VOICE", "")
+        voice = request.args.get("VOICE", request.args.get("LOCALE", "en-us"))
 
     # <VOICE>;<VOCODER>
     vocoder: typing.Optional[str] = None
@@ -694,9 +480,9 @@ async def api_process():
     if vocoder is not None:
         # Try to interpret as quality
         vocoder = vocoder.strip()
-        vocoder = _VOCODER_QUALITY.get(vocoder, vocoder)
+        vocoder = VOCODER_QUALITY.get(vocoder, vocoder)
     else:
-        vocoder = _DEFAULT_VOCODER
+        vocoder = VocoderQuality.HIGH
 
     wav_bytes = await text_to_wav(
         text,
@@ -721,68 +507,6 @@ async def api_voices():
 
 
 # -----------------------------------------------------------------------------
-
-
-def get_phonemizer(language: str) -> gruut.Phonemizer:
-    phonemizer = _GRUUT_PHONEMIZER.get(language)
-    if phonemizer is None:
-        # Custom lexicon
-        lexicon: typing.Optional[
-            typing.MutableMapping[str, typing.List[gruut.WordPronunciation]]
-        ] = None
-
-        lexicon_path: typing.Optional[str] = None
-        inline_prons: typing.List[typing.Tuple[str, str]] = []
-
-        if args.lexicon:
-            # Check for a custom lexicon for this language
-            for lexicon_lang, lexicon_lang_path in args.lexicon:
-                if lexicon_lang == language:
-                    lexicon_path = lexicon_lang_path
-                    break
-
-        if lexicon_path is not None:
-            _LOGGER.debug("Loading lexicon from %s", lexicon_path)
-            lexicon = defaultdict(list)
-
-            with open(lexicon_path, "r") as lexicon_file:
-                for line in lexicon_file:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    word, phonemes = line.split(maxsplit=1)
-                    if phonemes.startswith("{{") and phonemes.endswith("}}"):
-                        # {{ inline pronunciation }}
-                        inline_prons.append((word, phonemes))
-                    else:
-                        # Phonemes
-                        lexicon[word].append(
-                            gruut.WordPronunciation(phonemes=phonemes.split())
-                        )
-
-        phonemizer = gruut.get_phonemizer(
-            language,
-            word_break=gruut_ipa.IPA.BREAK_WORD.value,
-            inline_pronunciations=True,
-            lexicon=lexicon,
-        )
-
-        assert phonemizer is not None, f"Unsupported language: {language}"
-
-        if (lexicon is not None) and inline_prons:
-            # Expand {{ inline pronunciations }}
-            for word, inline_pron in inline_prons:
-                encoded_pron = gruut.encode_inline_pronunciations(inline_pron, None)
-                word_pron = phonemizer.get_pronunciation(
-                    encoded_pron, inline_pronunciations=True
-                )
-                if word_pron is not None:
-                    lexicon[word].append(word_pron)
-
-        _GRUUT_PHONEMIZER[language] = phonemizer
-
-    return phonemizer
 
 
 # -----------------------------------------------------------------------------
@@ -816,7 +540,7 @@ async def wav(filename) -> Response:
 
 
 # Swagger UI
-quart_api_doc(
+api_doc(
     app, config_path=str(_DIR / "swagger.yaml"), url_prefix="/openapi", title="Larynx"
 )
 

@@ -644,6 +644,7 @@ def read(filename, mmap=False):
         fid = filename
         mmap = False
     else:
+        # pylint: disable=consider-using-with
         fid = open(filename, "rb")
 
     try:
@@ -658,10 +659,8 @@ def read(filename, mmap=False):
                 if data_chunk_received:
                     # End of file but data successfully read
                     warnings.warn(
-                        "Reached EOF prematurely; finished at {:d} bytes, "
-                        "expected {:d} bytes from header.".format(
-                            fid.tell(), file_size
-                        ),
+                        f"Reached EOF prematurely; finished at {fid.tell()} bytes, "
+                        "expected {file_size} bytes from header.",
                         WavFileWarning,
                         stacklevel=2,
                     )
@@ -775,6 +774,7 @@ def write(filename, rate, data):
     if hasattr(filename, "write"):
         fid = filename
     else:
+        # pylint: disable=consider-using-with
         fid = open(filename, "wb")
 
     fs = rate
@@ -784,7 +784,7 @@ def write(filename, rate, data):
         if not (
             dkind == "i" or dkind == "f" or (dkind == "u" and data.dtype.itemsize == 1)
         ):
-            raise ValueError("Unsupported data type '%s'" % data.dtype)
+            raise ValueError(f"Unsupported data type '{data.dtype}'")
 
         header_data = b""
 

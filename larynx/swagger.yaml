@@ -52,8 +52,8 @@ paths:
             type: number
             example: 0.85
         - in: query
-          name: inlinePronunciations
-          description: 'Enable inline [[ phonemes ]] or {{ par{tial} words }} in text'
+          name: ssml
+          description: 'Input text in SSML'
           schema:
             type: boolean
             example: false
@@ -107,8 +107,8 @@ paths:
             type: number
             example: 0.85
         - in: query
-          name: inlinePronunciations
-          description: 'Enable inline [[ phonemes ]] or {{ par{tial} words }} in text'
+          name: ssml
+          description: 'Input text is SSML'
           schema:
             type: boolean
             example: false
@@ -146,53 +146,6 @@ paths:
         - in: query
           name: language
           required: true
-          description: 'Gruut language code'
-          schema:
-            type: string
-            example: 'en-us'
-      produces:
-        - application/json
-      responses:
-        '200':
-          description: phonemes
-          schema:
-            type: object
-  /api/word-phonemes:
-    get:
-      summary: 'Get phonemes for word'
-      parameters:
-        - in: query
-          name: word
-          description: 'Word to get phonemes for'
-          schema:
-            type: string
-            example: 'raxacoricofallipatorius'
-        - in: query
-          name: language
-          description: 'Gruut language code'
-          schema:
-            type: string
-            example: 'en-us'
-      produces:
-        - application/json
-      responses:
-        '200':
-          description: phonemes
-          schema:
-            type: object
-    post:
-      summary: 'Get phonemes for word'
-      requestBody:
-        required: true
-        description: 'Word to get phonemes for'
-        content:
-          text/plain:
-            schema:
-              type: string
-              example: 'raxacoricofallipatorius'
-      parameters:
-        - in: query
-          name: language
           description: 'Gruut language code'
           schema:
             type: string

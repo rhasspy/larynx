@@ -1,9 +1,10 @@
 import typing
 
 import numpy as np
+import torch
 
-from .audio import dynamic_range_decompression, inverse, mel_basis, transform
-from .constants import SettingsType, VocoderModel, VocoderModelConfig
+from larynx.audio import dynamic_range_decompression, inverse, mel_basis, transform
+from larynx.constants import SettingsType, VocoderModel, VocoderModelConfig
 
 # -----------------------------------------------------------------------------
 
@@ -20,17 +21,18 @@ class GriffinLimVocoder(VocoderModel):
         mel_scaling: float = 1000.0,
         iterations: int = 60,
     ):
-        super(GriffinLimVocoder, self).__init__(config)
+        super().__init__(config)
 
         self.mel_basis = mel_basis(sample_rate, num_fft, num_mels, mel_fmin, mel_fmax)
         self.mel_scaling = mel_scaling
         self.iterations = iterations
 
     def mels_to_audio(
-        self, mels: np.ndarray, settings: typing.Optional[SettingsType] = None
+        self, mels: torch.Tensor, settings: typing.Optional[SettingsType] = None
     ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
-        mel_decompress = dynamic_range_decompression(mels).squeeze(0)
+        mels_array = mels.cpu().numpy()
+        mel_decompress = dynamic_range_decompression(mels_array).squeeze(0)
         mel_decompress = mel_decompress.transpose()
         spec_from_mel = np.matmul(mel_decompress, self.mel_basis)
         spec_from_mel = np.expand_dims(spec_from_mel.transpose(), 0)

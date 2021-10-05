@@ -58,7 +58,7 @@ def load_checkpoint(
     if hasattr(model, "module"):
         model.module.load_state_dict(new_state_dict)  # type: ignore
     else:
-        model.load_state_dict(new_state_dict)
+        model.load_state_dict(new_state_dict)  # type: ignore
 
     return Checkpoint(
         model=model,

@@ -6,7 +6,6 @@ from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from pathlib import Path
 
 import gruut
-import gruut_ipa
 import numpy as np
 
 import phonemes2ids
@@ -14,6 +13,7 @@ from larynx.audio import AudioSettings
 from larynx.constants import (
     TextToSpeechModel,
     TextToSpeechModelConfig,
+    TextToSpeechResult,
     TextToSpeechType,
     VocoderModel,
     VocoderModelConfig,
@@ -22,10 +22,10 @@ from larynx.constants import (
 )
 from larynx.utils import (
     DEFAULT_VOICE_URL_FORMAT,
+    VOCODER_QUALITY,
     download_voice,
     get_voice_download_name,
     get_voices_dirs,
-    resolve_lang,
     resolve_voice_name,
     split_voice_name,
     valid_voice_dir,
@@ -37,10 +37,209 @@ _DIR = Path(__file__).parent
 
 __version__ = (_DIR / "VERSION").read_text().strip()
 
+_DEFAULT_AUDIO_SETTINGS = AudioSettings()
+
 # -----------------------------------------------------------------------------
 
-_TTS_MODEL_CACHE = {}
-_VOCODER_MODEL_CACHE = {}
+
+def text_to_speech(
+    text: str,
+    voice_or_lang: str = "en-us",
+    vocoder_or_quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
+    ssml: bool = False,
+    tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    denoiser_strength: float = 0.0,
+    use_cuda: bool = False,
+    half: bool = False,
+    executor: typing.Optional[Executor] = None,
+    custom_voices_dir: typing.Optional[typing.Union[str, Path]] = None,
+    url_format: str = DEFAULT_VOICE_URL_FORMAT,
+) -> typing.Iterable[TextToSpeechResult]:
+    resolved_name = resolve_voice_name(voice_or_lang)
+    voice_lang, _voice_name, _voice_model_type = split_voice_name(resolved_name)
+    voice_lang = gruut.resolve_lang(voice_lang)
+
+    if executor is None:
+        executor = ThreadPoolExecutor()
+
+    futures: typing.Dict[Future, TextToSpeechResult] = {}
+
+    for sentence in gruut.sentences(
+        text, lang=voice_lang, ssml=ssml, explicit_lang=False
+    ):
+        tts_model = None
+        tts_model_names = []
+
+        if sentence.voice:
+            tts_model_names.append(sentence.voice)
+
+        if sentence.lang:
+            if gruut.resolve_lang(sentence.lang) == voice_lang:
+                # Use provided voice as default for its language
+                tts_model_names.append(resolved_name)
+            else:
+                tts_model_names.append(sentence.lang)
+
+        tts_model_names.append(resolved_name)
+        tts_model_names.append(voice_or_lang)
+
+        # Try to load a TTS model for this sentence
+        for tts_voice_name in filter(None, tts_model_names):
+            tts_model = get_tts_model(
+                tts_voice_name,
+                use_cuda=use_cuda,
+                half=half,
+                custom_voices_dir=custom_voices_dir,
+                url_format=url_format,
+            )
+            if tts_model is not None:
+                break
+
+        assert tts_model is not None, "Failed to load voice"
+
+        vocoder_model = get_vocoder_model(
+            vocoder_or_quality,
+            use_cuda=use_cuda,
+            half=half,
+            denoiser_strength=denoiser_strength,
+            custom_voices_dir=custom_voices_dir,
+            url_format=url_format,
+        )
+        assert vocoder_model is not None, "Failed to load vocoder"
+
+        # Convert text to phonemes
+        phoneme_to_id = getattr(tts_model, "phoneme_to_id", {})
+        audio_settings = getattr(tts_model, "audio_settings", None)
+        if audio_settings is None:
+            audio_settings = _DEFAULT_AUDIO_SETTINGS
+
+        sent_phonemes = [w.phonemes for w in sentence if w.phonemes]
+        sent_phoneme_ids = phonemes2ids.phonemes2ids(
+            sent_phonemes,
+            phoneme_to_id,
+            pad="_",
+            blank="#",
+            separate={"ˈ", "ˌ", "²"},
+            simple_punctuation=True,
+        )
+
+        _LOGGER.debug("%s %s %s", sentence.text, sent_phonemes, sent_phoneme_ids)
+
+        # Convert phonemes to audio
+        future = executor.submit(
+            _sentence_task,
+            np.array(sent_phoneme_ids, dtype=np.int64),
+            audio_settings,
+            tts_model,
+            tts_settings,
+            vocoder_model,
+            vocoder_settings,
+            pause_before_ms=sentence.pause_before_ms,
+            pause_after_ms=sentence.pause_after_ms,
+        )
+
+        futures[future] = TextToSpeechResult(
+            text=sentence.text_with_ws,
+            audio=None,
+            sample_rate=audio_settings.sample_rate,
+        )
+
+    for future, result in futures.items():
+        result.audio = future.result()
+
+        yield result
+
+
+# lang -> phoneme -> id
+_PHONEME_TO_ID: typing.Dict[str, typing.Dict[str, int]] = {}
+
+# True if stress is included in phonemes
+_LANG_STRESS = {
+    "en": True,
+    "en-us": True,
+    "fr": True,
+    "fr-fr": True,
+    "es": True,
+    "es-es": True,
+    "it": True,
+    "it-it": True,
+    "nl": True,
+    "sw": True,
+}
+
+
+# -----------------------------------------------------------------------------
+
+
+def _sentence_task(
+    phoneme_ids,
+    audio_settings,
+    tts_model,
+    tts_settings,
+    vocoder_model,
+    vocoder_settings,
+    pause_before_ms: int = 0,
+    pause_after_ms: int = 0,
+):
+    # Run text to speech
+    _LOGGER.debug("Running text to speech model (%s)", tts_model.__class__.__name__)
+    tts_start_time = time.perf_counter()
+
+    mels = tts_model.phonemes_to_mels(phoneme_ids, settings=tts_settings)
+    tts_end_time = time.perf_counter()
+
+    _LOGGER.debug(
+        "Got mels in %s second(s) (shape=%s)", tts_end_time - tts_start_time, mels.shape
+    )
+
+    # Do denormalization, etc.
+    if audio_settings.signal_norm:
+        mels = audio_settings.denormalize(mels)
+
+    if audio_settings.convert_db_to_amp:
+        mels = audio_settings.db_to_amp(mels)
+
+    if audio_settings.do_dynamic_range_compression:
+        mels = audio_settings.dynamic_range_compression(mels)
+
+    # Run vocoder
+    _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
+    vocoder_start_time = time.perf_counter()
+    audio = vocoder_model.mels_to_audio(mels, settings=vocoder_settings)
+    vocoder_end_time = time.perf_counter()
+
+    _LOGGER.debug(
+        "Got audio in %s second(s) (shape=%s)",
+        vocoder_end_time - vocoder_start_time,
+        audio.shape,
+    )
+
+    audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
+    infer_sec = vocoder_end_time - tts_start_time
+    real_time_factor = infer_sec / audio_duration_sec if audio_duration_sec > 0 else 0.0
+
+    _LOGGER.debug(
+        "Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)",
+        real_time_factor,
+        infer_sec,
+        audio_duration_sec,
+    )
+
+    # Add pauses from SSML <break> tags
+    before_samples = max(0, (pause_before_ms * audio_settings.sample_rate) // 1000)
+    after_samples = max(0, (pause_after_ms * audio_settings.sample_rate) // 1000)
+    if (before_samples > 0) or (after_samples > 0):
+        audio = np.pad(
+            audio, pad_width=(before_samples, after_samples), constant_values=0
+        )
+
+    return audio
+
+
+# -----------------------------------------------------------------------------
+
+_TTS_MODEL_CACHE: typing.Dict[str, TextToSpeechModel] = {}
 
 
 def get_tts_model(
@@ -51,7 +250,7 @@ def get_tts_model(
     url_format: str = DEFAULT_VOICE_URL_FORMAT,
     custom_voices_dir: typing.Optional[typing.Union[str, Path]] = None,
 ) -> typing.Optional[TextToSpeechModel]:
-    resolved_name = resolve_voice_name(name or resolve_lang(lang))
+    resolved_name = resolve_voice_name(name or gruut.resolve_lang(lang))
 
     # Try to load model from cache first
     maybe_model = _TTS_MODEL_CACHE.get(resolved_name)
@@ -124,31 +323,46 @@ def get_tts_model(
     return maybe_model
 
 
-_VOCODER_QUALITY = {
-    "high": "hifi_gan/universal_large",
-    "medium": "hifi_gan/vctk_medium",
-    "low": "hifi_gan/vctk_small",
-}
+def load_tts_model(
+    model_type: typing.Union[str, TextToSpeechType],
+    model_path: typing.Union[str, Path],
+    use_cuda: bool = False,
+    half: bool = False,
+) -> TextToSpeechModel:
+    """Load the appropriate text to speech model"""
+    config = TextToSpeechModelConfig(
+        model_path=Path(model_path), use_cuda=use_cuda, half=half
+    )
 
-_DEFAULT_AUDIO_SETTINGS = AudioSettings()
+    if model_type == TextToSpeechType.GLOW_TTS:
+        from larynx.glow_tts import GlowTextToSpeech
+
+        return GlowTextToSpeech(config)
+
+    raise ValueError(f"Unknown text to speech model type: {model_type}")
+
+
+# -----------------------------------------------------------------------------
+
+_VOCODER_MODEL_CACHE: typing.Dict[str, VocoderModel] = {}
 
 
 def get_vocoder_model(
-    quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
+    name_or_quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
     use_cuda: bool = False,
     half: bool = False,
     denoiser_strength: float = 0.0,
     url_format: str = DEFAULT_VOICE_URL_FORMAT,
     custom_voices_dir: typing.Optional[typing.Union[str, Path]] = None,
-) -> typing.Optional[TextToSpeechModel]:
+) -> typing.Optional[VocoderModel]:
     # Try to load model from cache first
-    maybe_model = _VOCODER_MODEL_CACHE.get(quality)
+    maybe_model = _VOCODER_MODEL_CACHE.get(name_or_quality)
 
     if maybe_model is None:
         # Search for the vocoder
         model_dir: typing.Optional[Path] = None
-        model_type, model_name = _VOCODER_QUALITY.get(
-            quality, _VOCODER_QUALITY["high"]
+        model_type, model_name = VOCODER_QUALITY.get(
+            name_or_quality, name_or_quality
         ).split("/", maxsplit=1)
 
         # Directories to search for voices/vocoders
@@ -178,344 +392,11 @@ def get_vocoder_model(
         )
 
         # Cache
-        _VOCODER_MODEL_CACHE[quality] = model
+        _VOCODER_MODEL_CACHE[name_or_quality] = model
 
         return model
 
     return maybe_model
-
-
-def text_to_speech2(
-    text: str,
-    voice_or_lang: str = "en-us",
-    quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
-    ssml: bool = False,
-    tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    denoiser_strength: float = 0.0,
-    use_cuda: bool = False,
-    half: bool = False,
-    executor: typing.Optional[Executor] = None,
-):
-    resolved_name = resolve_voice_name(voice_or_lang)
-    voice_lang, _voice_name, _voice_model_type = split_voice_name(resolved_name)
-
-    if executor is None:
-        executor = ThreadPoolExecutor()
-
-    futures = {}
-
-    for sentence in gruut.sentences(
-        text, lang=voice_lang, ssml=ssml, explicit_lang=False
-    ):
-        tts_model = None
-
-        # Try to load a TTS model for this sentence
-        for tts_voice_name in filter(
-            None, [sentence.voice, sentence.lang, resolved_name, voice_or_lang]
-        ):
-            tts_model = get_tts_model(tts_voice_name, use_cuda=use_cuda, half=half)
-            if tts_model is not None:
-                break
-
-        assert tts_model is not None, "Failed to load voice"
-
-        vocoder_model = get_vocoder_model(
-            quality, use_cuda=use_cuda, half=half, denoiser_strength=denoiser_strength
-        )
-        assert vocoder_model is not None, "Failed to load vocoder"
-
-        # Convert text to phonemes
-        phoneme_to_id = getattr(tts_model, "phoneme_to_id", {})
-        audio_settings = getattr(tts_model, "audio_settings", None)
-        if audio_settings is None:
-            audio_settings = _DEFAULT_AUDIO_SETTINGS
-
-        sent_phonemes = [w.phonemes for w in sentence if w.phonemes]
-        sent_phoneme_ids = phonemes2ids.phonemes2ids(
-            sent_phonemes,
-            phoneme_to_id,
-            pad="_",
-            blank="#",
-            separate={"ˈ", "ˌ", "²"},
-            simple_punctuation=True,
-        )
-
-        _LOGGER.debug("%s %s %s", sentence.text, sent_phonemes, sent_phoneme_ids)
-
-        # Convert phonemes to audio
-        future = executor.submit(
-            _sentence_task,
-            np.array(sent_phoneme_ids, dtype=np.int64),
-            audio_settings,
-            tts_model,
-            tts_settings,
-            vocoder_model,
-            vocoder_settings,
-        )
-
-        futures[future] = sentence.text_with_ws
-
-    for future, raw_text in futures.items():
-        audio = future.result()
-        yield raw_text, audio
-
-
-# lang -> phoneme -> id
-_PHONEME_TO_ID: typing.Dict[str, typing.Dict[str, int]] = {}
-
-# True if stress is included in phonemes
-_LANG_STRESS = {
-    "en": True,
-    "en-us": True,
-    "fr": True,
-    "fr-fr": True,
-    "es": True,
-    "es-es": True,
-    "it": True,
-    "it-it": True,
-    "nl": True,
-    "sw": True,
-}
-
-
-# def text_to_speech(
-#     text: str,
-#     lang: str,
-#     tts_model: typing.Union[TextToSpeechModel, Future],
-#     vocoder_model: typing.Union[VocoderModel, Future],
-#     audio_settings: AudioSettings,
-#     number_converters: bool = False,
-#     disable_currency: bool = False,
-#     word_indexes: bool = False,
-#     inline_pronunciations: bool = False,
-#     phoneme_transform: typing.Optional[typing.Callable[[str], str]] = None,
-#     text_lang: typing.Optional[str] = None,
-#     phoneme_lang: typing.Optional[str] = None,
-#     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
-#     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
-#     max_workers: typing.Optional[int] = 2,
-#     executor: typing.Optional[Executor] = None,
-#     phonemizer: typing.Optional[gruut.Phonemizer] = None,
-# ) -> typing.Iterable[typing.Tuple[str, np.ndarray]]:
-#     """Tokenize/phonemize text, convert mel spectrograms, then to audio"""
-#     phoneme_lang = phoneme_lang or lang
-#     text_lang = text_lang or lang
-
-#     phoneme_to_id = _PHONEME_TO_ID.get(phoneme_lang)
-#     if phoneme_to_id is None:
-#         no_stress = not _LANG_STRESS.get(phoneme_lang, False)
-#         phonemes_list = gruut.lang.id_to_phonemes(phoneme_lang, no_stress=no_stress)
-#         phoneme_to_id = {p: i for i, p in enumerate(phonemes_list)}
-#         _LOGGER.debug(phoneme_to_id)
-
-#         _PHONEME_TO_ID[phoneme_lang] = phoneme_to_id
-
-#     # -------------------------------------------------------------------------
-#     # Tokenization/Phonemization
-#     # -------------------------------------------------------------------------
-
-#     all_sentences = typing.cast(
-#         typing.List[gruut.Sentence],
-#         list(
-#             gruut.text_to_phonemes(
-#                 text,
-#                 lang=text_lang,
-#                 return_format="sentences",
-#                 inline_pronunciations=inline_pronunciations,
-#                 tokenizer_args={
-#                     "use_number_converters": number_converters,
-#                     "do_replace_currency": (not disable_currency),
-#                 },
-#                 phonemizer=phonemizer,
-#                 phonemizer_args={
-#                     "word_break": gruut_ipa.IPA.BREAK_WORD.value,
-#                     "use_word_indexes": word_indexes,
-#                 },
-#             )
-#         ),
-#     )
-
-#     # Process sentences in separate threads concurrently
-#     futures = {}
-#     if executor is None:
-#         executor = ThreadPoolExecutor(max_workers=max_workers)
-
-#     for sentence in all_sentences:
-#         if sentence.phonemes is None:
-#             continue
-
-#         sentence_pron = []
-#         for word_pron in sentence.phonemes:
-#             for phoneme in word_pron:
-#                 if not phoneme:
-#                     continue
-
-#                 # Split out stress ("ˈa" -> "ˈ", "a")
-#                 # Loop because languages like Swedish can have multiple
-#                 # accents on a single phoneme.
-#                 while phoneme and (
-#                     gruut_ipa.IPA.is_stress(phoneme[0])
-#                     or gruut_ipa.IPA.is_accent(phoneme[0])
-#                 ):
-#                     sentence_pron.append(phoneme[0])
-#                     phoneme = phoneme[1:]
-
-#                 sentence_pron.append(phoneme)
-
-#         if not sentence_pron:
-#             # No phonemes
-#             continue
-
-#         # Ensure sentence ends with major break
-#         if sentence_pron[-1] != gruut_ipa.IPA.BREAK_MAJOR.value:
-#             sentence_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
-
-#         # Add another major break for good measure
-#         sentence_pron.append(gruut_ipa.IPA.BREAK_MAJOR.value)
-
-#         text_phonemes: typing.Iterable[str] = sentence_pron
-
-#         # ---------------------------------------------------------------------
-
-#         if phoneme_transform is not None:
-#             mapped_phonemes = []
-#             for phoneme in text_phonemes:
-#                 mapped_phoneme = phoneme_transform(phoneme)
-#                 if isinstance(mapped_phoneme, str):
-#                     mapped_phonemes.append(mapped_phoneme)
-#                 else:
-#                     # List
-#                     mapped_phonemes.extend(mapped_phoneme)
-
-#             text_phonemes = mapped_phonemes
-
-#         _LOGGER.debug("Words for '%s': %s", sentence.raw_text, sentence.clean_words)
-#         _LOGGER.debug("Phonemes for '%s': %s", sentence.raw_text, text_phonemes)
-
-#         # Convert to phoneme ids
-#         phoneme_ids_list = []
-#         for phoneme in text_phonemes:
-#             phoneme_id = phoneme_to_id.get(phoneme)
-#             if phoneme_id is not None:
-#                 phoneme_ids_list.append(phoneme_id)
-#             elif not gruut_ipa.IPA.is_stress(phoneme):
-#                 _LOGGER.warning("%s is missing from voice phoneme inventory", phoneme)
-
-#         phoneme_ids = np.array(phoneme_ids_list)
-
-#         # Resolve TTS/vocoder model futures
-#         if isinstance(tts_model, Future):
-#             tts_model = tts_model.result()
-
-#         if isinstance(vocoder_model, Future):
-#             vocoder_model = vocoder_model.result()
-
-#         future = executor.submit(
-#             _sentence_task,
-#             phoneme_ids,
-#             audio_settings,
-#             tts_model,
-#             tts_settings,
-#             vocoder_model,
-#             vocoder_settings,
-#         )
-
-#         futures[future] = sentence.raw_text
-
-#     # -------------------------------------------------------------------------
-
-#     for future, raw_text in futures.items():
-#         audio = future.result()
-#         yield raw_text, audio
-
-
-# -----------------------------------------------------------------------------
-
-
-def _sentence_task(
-    phoneme_ids,
-    audio_settings,
-    tts_model,
-    tts_settings,
-    vocoder_model,
-    vocoder_settings,
-):
-    # Run text to speech
-    _LOGGER.debug("Running text to speech model (%s)", tts_model.__class__.__name__)
-    tts_start_time = time.perf_counter()
-
-    mels = tts_model.phonemes_to_mels(phoneme_ids, settings=tts_settings)
-    tts_end_time = time.perf_counter()
-
-    _LOGGER.debug(
-        "Got mels in %s second(s) (shape=%s)", tts_end_time - tts_start_time, mels.shape
-    )
-
-    # Do denormalization, etc.
-    if audio_settings.signal_norm:
-        mels = audio_settings.denormalize(mels)
-
-    if audio_settings.convert_db_to_amp:
-        mels = audio_settings.db_to_amp(mels)
-
-    if audio_settings.do_dynamic_range_compression:
-        mels = audio_settings.dynamic_range_compression(mels)
-
-    # Run vocoder
-    _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
-    vocoder_start_time = time.perf_counter()
-    audio = vocoder_model.mels_to_audio(mels, settings=vocoder_settings)
-    vocoder_end_time = time.perf_counter()
-
-    _LOGGER.debug(
-        "Got audio in %s second(s) (shape=%s)",
-        vocoder_end_time - vocoder_start_time,
-        audio.shape,
-    )
-
-    audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
-    infer_sec = vocoder_end_time - tts_start_time
-    real_time_factor = infer_sec / audio_duration_sec if audio_duration_sec > 0 else 0.0
-
-    _LOGGER.debug(
-        "Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)",
-        real_time_factor,
-        infer_sec,
-        audio_duration_sec,
-    )
-
-    return audio
-
-
-# -----------------------------------------------------------------------------
-
-
-def load_tts_model(
-    model_type: typing.Union[str, TextToSpeechType],
-    model_path: typing.Union[str, Path],
-    use_cuda: bool = False,
-    half: bool = False,
-) -> TextToSpeechModel:
-    """Load the appropriate text to speech model"""
-    config = TextToSpeechModelConfig(
-        model_path=Path(model_path), use_cuda=use_cuda, half=half
-    )
-
-    if model_type == TextToSpeechType.TACOTRON2:
-        from .tacotron2 import Tacotron2TextToSpeech
-
-        return Tacotron2TextToSpeech(config)
-
-    if model_type == TextToSpeechType.GLOW_TTS:
-        from .glow_tts import GlowTextToSpeech
-
-        return GlowTextToSpeech(config)
-
-    raise ValueError(f"Unknown text to speech model type: {model_type}")
-
-
-# -----------------------------------------------------------------------------
 
 
 def load_vocoder_model(
@@ -535,18 +416,13 @@ def load_vocoder_model(
     )
 
     if model_type == VocoderType.GRIFFIN_LIM:
-        from .griffin_lim import GriffinLimVocoder
+        from larynx.griffin_lim import GriffinLimVocoder
 
         return GriffinLimVocoder(config)
 
     if model_type == VocoderType.HIFI_GAN:
-        from .hifi_gan import HiFiGanVocoder
+        from larynx.hifi_gan import HiFiGanVocoder
 
         return HiFiGanVocoder(config, executor=executor)
-
-    if model_type == VocoderType.WAVEGLOW:
-        from .waveglow import WaveGlowVocoder
-
-        return WaveGlowVocoder(config, executor=executor)
 
     raise ValueError(f"Unknown vocoder model type: {model_type}")

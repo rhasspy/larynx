@@ -2,7 +2,6 @@ import logging
 import typing
 
 import numpy as np
-import onnxruntime
 import torch
 
 from glow_tts.checkpoint import load_checkpoint
@@ -17,7 +16,7 @@ _LOGGER = logging.getLogger("glow_tts")
 
 class GlowTextToSpeech(TextToSpeechModel):
     def __init__(self, config: TextToSpeechModelConfig):
-        super(GlowTextToSpeech, self).__init__(config)
+        super().__init__(config)
 
         self.use_cuda = config.use_cuda
 
@@ -44,7 +43,10 @@ class GlowTextToSpeech(TextToSpeechModel):
         checkpoint = load_checkpoint(
             generator_path, self.config, use_cuda=config.use_cuda
         )
-        self.model = checkpoint.model
+
+        assert checkpoint.model is not None
+
+        self.model: FlowGenerator = checkpoint.model
 
         if config.half:
             self.model.half()
@@ -63,13 +65,9 @@ class GlowTextToSpeech(TextToSpeechModel):
     ) -> torch.Tensor:
         """Convert phoneme ids to mel spectrograms"""
         # Convert to tensors
-        # TODO: Allow batches
-        text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
-        text_lengths = np.array([text.shape[1]], dtype=np.int64)
-
         noise_scale = self.noise_scale
         length_scale = self.length_scale
-        speaker_id = None
+        speaker_id: typing.Optional[torch.Tensor] = None
 
         if settings:
             noise_scale = float(settings.get("noise_scale", noise_scale))
@@ -82,7 +80,7 @@ class GlowTextToSpeech(TextToSpeechModel):
                     speaker_id = speaker_id.cuda()
 
         text = torch.autograd.Variable(torch.LongTensor(phoneme_ids).unsqueeze(0))
-        text_lengths = torch.LongTensor([text.shape[1]])
+        text_lengths: torch.Tensor = torch.LongTensor([text.shape[1]])
 
         if self.use_cuda:
             text = text.cuda()
