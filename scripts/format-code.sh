@@ -10,7 +10,7 @@ if [[ -d "${venv}" ]]; then
     source "${venv}/bin/activate"
 fi
 
-python_files=("${src_dir}/larynx/"*.py)
+python_files=("${src_dir}/larynx/"*.py "${src_dir}/"*.py)
 
 export PYTHONPATH="${src_dir}"
 

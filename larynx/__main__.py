@@ -217,6 +217,7 @@ def main():
         raw_stream_thread.start()
 
     all_audios: typing.List[np.ndarray] = []
+    sample_rate: int = 22050
     wav_data: typing.Optional[bytes] = None
     play_command = shlex.split(args.play_command)
 
@@ -265,6 +266,8 @@ def main():
                         "Seconds to first audio: %s",
                         end_time_to_first_audio - start_time_to_first_audio,
                     )
+
+                sample_rate = result.sample_rate
 
                 if args.raw_stream:
                     assert raw_queue is not None
@@ -338,7 +341,7 @@ def main():
     # Write combined audio to stdout
     if all_audios:
         with io.BytesIO() as wav_io:
-            wav_write(wav_io, args.sample_rate, np.concatenate(all_audios))
+            wav_write(wav_io, sample_rate, np.concatenate(all_audios))
             wav_data = wav_io.getvalue()
 
         _LOGGER.debug("Writing WAV audio to stdout")

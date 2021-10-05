@@ -85,15 +85,13 @@ pip3 install --upgrade pip
 pip3 install --upgrade wheel setuptools
 ```
 
-Next, install larynx (with a reference to [a supplementary pip repo](https://synesthesiam.github.io/prebuilt-apps/) for the 32-bit ARM onnxruntime wheel):
+Next, install larynx:
 
 ```sh
-pip3 install -f 'https://synesthesiam.github.io/prebuilt-apps/' larynx
+pip3 install -f 'https://synesthesiam.github.io/prebuilt-apps/' -f 'https://download.pytorch.org/whl/cpu/torch_stable.html' larynx
 ```
 
-Then run `larynx` or `larynx.server` for the web server. You may also execute the Python modules directly with `python3 -m larynx` and `python3 -m larynx.server`.
-
-For 32-bit ARM systems, a pre-built [onnxruntime wheel](https://github.com/synesthesiam/prebuilt-apps/releases/tag/v1.0/) is available (official 64-bit wheels are available in [PyPI](https://pypi.org/project/onnxruntime/)).
+Then run `larynx` or `larynx.server` for the web server. You may also execute the Python module directly with `python3 -m larynx` and `python3 -m larynx.server`.
 
 ### Voice/Vocoder Download
 
