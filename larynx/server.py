@@ -201,6 +201,7 @@ async def text_to_wav(
             use_cuda=args.cuda,
             half=args.half,
             ssml=ssml,
+            url_format=args.url_format,
         ),
     )
 
