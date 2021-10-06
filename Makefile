@@ -21,7 +21,7 @@ test:
 
 docker:
 	scripts/build-docker.sh
-	for lang in de-de en-us es-es fr-fr it-it nl ru-ru sv-se; do \
+	for lang in de-de en-us es-es fr-fr it-it nl ru-ru sv-se sw; do \
         LARYNX_LANGUAGE=$$lang scripts/build-docker.sh; \
     done
 
