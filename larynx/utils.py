@@ -6,8 +6,8 @@ import shutil
 import tempfile
 import typing
 import urllib.request
-from urllib.error import HTTPError
 from pathlib import Path
+from urllib.error import HTTPError
 
 from larynx.constants import VocoderType
 

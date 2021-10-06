@@ -1,6 +1,6 @@
 SHELL := bash
 
-.PHONY: check clean reformat dist docker amd64 index
+.PHONY: check clean reformat dist docker amd64 index test
 
 all: dist
 
@@ -15,6 +15,9 @@ reformat:
 
 dist:
 	python3 setup.py sdist
+
+test:
+	scripts/run-tests.sh
 
 docker:
 	scripts/build-docker.sh

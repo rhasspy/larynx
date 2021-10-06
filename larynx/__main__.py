@@ -284,19 +284,31 @@ def main():
 
                         # Play audio
                         _LOGGER.debug("Playing audio with play command")
-                        subprocess.run(
-                            play_command,
-                            input=wav_data,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            check=True,
-                        )
+                        try:
+                            subprocess.run(
+                                play_command,
+                                input=wav_data,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                check=True,
+                            )
+                        except FileNotFoundError:
+                            _LOGGER.error(
+                                "Unable to play audio with command '%s'. set with --play-command or redirect stdout",
+                                args.play_command,
+                            )
+                            with open("output.wav", "wb") as output_file:
+                                output_file.write(wav_data)
+
+                            _LOGGER.warning(
+                                "stdout not redirected. Wrote audio to output.wav."
+                            )
 
                     if args.output_dir:
                         # Determine file name
                         if args.output_naming == OutputNaming.TEXT:
                             # Use text itself
-                            file_name = text.replace(" ", "_")
+                            file_name = text.replace("", "_")
                             file_name = file_name.translate(
                                 str.maketrans(
                                     "", "", string.punctuation.replace("_", "")

@@ -129,6 +129,7 @@ def text_to_speech(
         # Convert phonemes to audio
         future = executor.submit(
             _sentence_task,
+            sentence.text,
             np.array(sent_phoneme_ids, dtype=np.int64),
             audio_settings,
             tts_model,
@@ -173,6 +174,7 @@ _LANG_STRESS = {
 
 
 def _sentence_task(
+    text: str,
     phoneme_ids,
     audio_settings,
     tts_model,
@@ -183,14 +185,19 @@ def _sentence_task(
     pause_after_ms: int = 0,
 ):
     # Run text to speech
-    _LOGGER.debug("Running text to speech model (%s)", tts_model.__class__.__name__)
+    _LOGGER.debug(
+        "Running text to speech model (%s) for '%s'", tts_model.__class__.__name__, text
+    )
     tts_start_time = time.perf_counter()
 
     mels = tts_model.phonemes_to_mels(phoneme_ids, settings=tts_settings)
     tts_end_time = time.perf_counter()
 
     _LOGGER.debug(
-        "Got mels in %s second(s) (shape=%s)", tts_end_time - tts_start_time, mels.shape
+        "Got mels in %s second(s) (shape=%s, text='%s')",
+        tts_end_time - tts_start_time,
+        mels.shape,
+        text,
     )
 
     # Do denormalization, etc.
@@ -204,15 +211,18 @@ def _sentence_task(
         mels = audio_settings.dynamic_range_compression(mels)
 
     # Run vocoder
-    _LOGGER.debug("Running vocoder model (%s)", vocoder_model.__class__.__name__)
+    _LOGGER.debug(
+        "Running vocoder model (%s) for '%s'", vocoder_model.__class__.__name__, text
+    )
     vocoder_start_time = time.perf_counter()
     audio = vocoder_model.mels_to_audio(mels, settings=vocoder_settings)
     vocoder_end_time = time.perf_counter()
 
     _LOGGER.debug(
-        "Got audio in %s second(s) (shape=%s)",
+        "Got audio in %s second(s) (shape=%s, text='%s')",
         vocoder_end_time - vocoder_start_time,
         audio.shape,
+        text,
     )
 
     audio_duration_sec = audio.shape[-1] / audio_settings.sample_rate
