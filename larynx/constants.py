@@ -8,6 +8,7 @@ from pathlib import Path
 
 if typing.TYPE_CHECKING:
     # Only import here if type checking
+    import onnxruntime
     import numpy as np
     import torch
 
@@ -38,6 +39,11 @@ class VocoderQuality(str, Enum):
     LOW = "low"
 
 
+class InferenceBackend(str, Enum):
+    ONNX = "onnx"
+    PYTORCH = "pytorch"
+
+
 # -----------------------------------------------------------------------------
 
 
@@ -46,8 +52,10 @@ class TextToSpeechModelConfig:
     """Configuration base class for text to speech models"""
 
     model_path: Path
+    session_options: onnxruntime.SessionOptions
     use_cuda: bool = True
     half: bool = True
+    backend: typing.Optional[InferenceBackend] = None
 
 
 class TextToSpeechModel(ABC):
@@ -58,7 +66,7 @@ class TextToSpeechModel(ABC):
 
     def phonemes_to_mels(
         self, phoneme_ids: np.ndarray, settings: typing.Optional[SettingsType] = None
-    ) -> torch.Tensor:
+    ) -> typing.Union[np.ndarray, torch.Tensor]:
         """Convert phoneme ids to mel spectrograms"""
         pass
 
@@ -71,9 +79,11 @@ class VocoderModelConfig:
     """Configuration base class for vocoder models"""
 
     model_path: Path
+    session_options: onnxruntime.SessionOptions
     use_cuda: bool = True
     half: bool = True
     denoiser_strength: float = 0.0
+    backend: typing.Optional[InferenceBackend] = None
 
 
 class VocoderModel(ABC):
@@ -83,7 +93,9 @@ class VocoderModel(ABC):
         pass
 
     def mels_to_audio(
-        self, mels: torch.Tensor, settings: typing.Optional[SettingsType] = None
+        self,
+        mels: typing.Union[np.ndarray, torch.Tensor],
+        settings: typing.Optional[SettingsType] = None,
     ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
         pass

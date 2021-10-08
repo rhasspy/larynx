@@ -3,6 +3,7 @@ import argparse
 import io
 import logging
 import os
+import platform
 import shlex
 import string
 import subprocess
@@ -17,6 +18,7 @@ from enum import Enum
 from pathlib import Path
 from queue import Queue
 
+from larynx.constants import InferenceBackend
 from larynx.utils import (
     DEFAULT_VOICE_URL_FORMAT,
     VOCODER_DIR_NAMES,
@@ -54,6 +56,20 @@ def main():
         if not args.cuda:
             args.half = False
             _LOGGER.warning("CUDA is not available")
+
+    # Handle optimizations.
+    # onnxruntime crashes on armv7l if optimizations are enabled.
+    setattr(args, "no_optimizations", False)
+    if args.optimizations == "off":
+        args.no_optimizations = True
+    elif args.optimizations == "auto":
+        if platform.machine() == "armv7l":
+            # Enabling optimizations on 32-bit ARM crashes
+            args.no_optimizations = True
+
+    backend: typing.Optional[InferenceBackend] = None
+    if args.backend:
+        backend = InferenceBackend(args.backend)
 
     # -------------------------------------------------------------------------
     # Daemon
@@ -227,7 +243,7 @@ def main():
         "length_scale": args.length_scale,
     }
     vocoder_settings: typing.Dict[str, typing.Any] = {
-        "denoiser_strength": args.denoiser_strength
+        "denoiser_strength": args.denoiser_strength,
     }
 
     # -------------------
@@ -247,6 +263,7 @@ def main():
                 voice_or_lang=args.voice,
                 ssml=args.ssml,
                 vocoder_or_quality=args.quality,
+                backend=backend,
                 use_cuda=args.cuda,
                 half=args.half,
                 denoiser_strength=args.denoiser_strength,
@@ -496,6 +513,18 @@ def get_args():
         "--half",
         action="store_true",
         help="Use faster FP16 for inference (requires --cuda)",
+    )
+    parser.add_argument(
+        "--optimizations",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help="Enable/disable Onnx optimizations (auto=disable on armv7l)",
+    )
+
+    parser.add_argument(
+        "--backend",
+        choices=[v.value for v in InferenceBackend],
+        help="Force use of specific inference backend (default: prefer onnx)",
     )
 
     parser.add_argument("--seed", type=int, help="Set random seed (default: not set)")

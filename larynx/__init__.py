@@ -7,10 +7,12 @@ from pathlib import Path
 
 import gruut
 import numpy as np
-
+import onnxruntime
 import phonemes2ids
+
 from larynx.audio import AudioSettings
 from larynx.constants import (
+    InferenceBackend,
     TextToSpeechModel,
     TextToSpeechModelConfig,
     TextToSpeechResult,
@@ -47,6 +49,7 @@ def text_to_speech(
     voice_or_lang: str = "en-us",
     vocoder_or_quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
     ssml: bool = False,
+    backend: typing.Optional[InferenceBackend] = None,
     tts_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     vocoder_settings: typing.Optional[typing.Dict[str, typing.Any]] = None,
     denoiser_strength: float = 0.0,
@@ -88,6 +91,7 @@ def text_to_speech(
         for tts_voice_name in filter(None, tts_model_names):
             tts_model = get_tts_model(
                 tts_voice_name,
+                backend=backend,
                 use_cuda=use_cuda,
                 half=half,
                 custom_voices_dir=custom_voices_dir,
@@ -100,6 +104,7 @@ def text_to_speech(
 
         vocoder_model = get_vocoder_model(
             vocoder_or_quality,
+            backend=backend,
             use_cuda=use_cuda,
             half=half,
             denoiser_strength=denoiser_strength,
@@ -255,6 +260,7 @@ _TTS_MODEL_CACHE: typing.Dict[str, TextToSpeechModel] = {}
 def get_tts_model(
     name: str = "",
     lang: str = "en-us",
+    backend: typing.Optional[InferenceBackend] = None,
     use_cuda: bool = False,
     half: bool = True,
     url_format: str = DEFAULT_VOICE_URL_FORMAT,
@@ -314,7 +320,7 @@ def get_tts_model(
 
         # Load checkpoint
         model = load_tts_model(
-            voice_model_type, model_dir, use_cuda=use_cuda, half=half
+            voice_model_type, model_dir, backend=backend, use_cuda=use_cuda, half=half
         )
         setattr(model, "phoneme_to_id", phoneme_to_id)
         setattr(model, "audio_settings", audio_settings)
@@ -336,12 +342,24 @@ def get_tts_model(
 def load_tts_model(
     model_type: typing.Union[str, TextToSpeechType],
     model_path: typing.Union[str, Path],
+    backend: typing.Optional[InferenceBackend] = None,
+    no_optimizations: bool = False,
     use_cuda: bool = False,
     half: bool = False,
 ) -> TextToSpeechModel:
     """Load the appropriate text to speech model"""
+    sess_options = onnxruntime.SessionOptions()
+    if no_optimizations:
+        sess_options.graph_optimization_level = (
+            onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+        )
+
     config = TextToSpeechModelConfig(
-        model_path=Path(model_path), use_cuda=use_cuda, half=half
+        model_path=Path(model_path),
+        session_options=sess_options,
+        use_cuda=use_cuda,
+        half=half,
+        backend=backend,
     )
 
     if model_type == TextToSpeechType.GLOW_TTS:
@@ -359,6 +377,7 @@ _VOCODER_MODEL_CACHE: typing.Dict[str, VocoderModel] = {}
 
 def get_vocoder_model(
     name_or_quality: typing.Union[str, VocoderQuality] = VocoderQuality.HIGH,
+    backend: typing.Optional[InferenceBackend] = None,
     use_cuda: bool = False,
     half: bool = False,
     denoiser_strength: float = 0.0,
@@ -396,6 +415,7 @@ def get_vocoder_model(
         model = load_vocoder_model(
             VocoderType.HIFI_GAN,
             model_dir,
+            backend=backend,
             use_cuda=use_cuda,
             half=half,
             denoiser_strength=denoiser_strength,
@@ -412,17 +432,27 @@ def get_vocoder_model(
 def load_vocoder_model(
     model_type: typing.Union[str, VocoderType],
     model_path: typing.Union[str, Path],
+    backend: typing.Optional[InferenceBackend] = None,
+    no_optimizations: bool = False,
     use_cuda: bool = False,
     half: bool = False,
     denoiser_strength: float = 0.0,
     executor: typing.Optional[Executor] = None,
 ) -> VocoderModel:
     """Load the appropriate vocoder model"""
+    sess_options = onnxruntime.SessionOptions()
+    if no_optimizations:
+        sess_options.graph_optimization_level = (
+            onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+        )
+
     config = VocoderModelConfig(
         model_path=Path(model_path),
+        session_options=sess_options,
         use_cuda=use_cuda,
         half=half,
         denoiser_strength=denoiser_strength,
+        backend=backend,
     )
 
     if model_type == VocoderType.GRIFFIN_LIM:
