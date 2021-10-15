@@ -21,12 +21,6 @@ test:
 
 docker:
 	scripts/build-docker.sh
-	for lang in de-de en-us es-es fr-fr it-it nl ru-ru sv-se sw; do \
-        LARYNX_LANGUAGE=$$lang scripts/build-docker.sh; \
-    done
-
-amd64:
-	NOBUILDX=1 scripts/build-docker.sh
 
 index:
 	bin/make_sample_html.py local/ > index.html

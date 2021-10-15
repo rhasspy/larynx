@@ -13,7 +13,8 @@ while [[ -n "$1" ]]; do
         update='1'
     elif [[ "$1" == '--port' ]]; then
         port="$2"
-        args+=("$1")
+        args+=('--port' "${port}")
+        shift 1
     else
         args+=("$1")
     fi

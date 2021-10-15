@@ -184,9 +184,12 @@ def get_voices_dirs(
 
 
 def valid_voice_dir(voice_dir: typing.Union[str, Path]) -> bool:
-    """Return True if directory exists and has a checkpoint file"""
+    """Return True if directory exists and has an Onnx model or PyTorch checkpoint"""
     voice_dir = Path(voice_dir)
-    return voice_dir.is_dir() and (len(list(voice_dir.glob("*.pth"))) > 0)
+    return voice_dir.is_dir() and (
+        (len(list(voice_dir.glob("*.onnx"))) > 0)
+        or (len(list(voice_dir.glob("*.pth"))) > 0)
+    )
 
 
 def get_runtime_dir() -> Path:

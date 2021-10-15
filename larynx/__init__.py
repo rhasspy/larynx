@@ -284,6 +284,7 @@ def get_tts_model(
         # Use directory under language first
         for voices_dir in voices_dirs:
             maybe_model_dir = voices_dir / voice_lang / voice_dir_name
+            _LOGGER.debug("Checking %s for voice %s", maybe_model_dir, resolved_name)
             if valid_voice_dir(maybe_model_dir):
                 model_dir = maybe_model_dir
                 break
@@ -292,6 +293,9 @@ def get_tts_model(
             # Search for voice in all directories
             for voices_dir in voices_dirs:
                 for maybe_model_dir in voices_dir.rglob(resolved_name):
+                    _LOGGER.debug(
+                        "Checking %s for voice %s", maybe_model_dir, resolved_name
+                    )
                     if valid_voice_dir(maybe_model_dir):
                         model_dir = maybe_model_dir
                         break
@@ -400,6 +404,9 @@ def get_vocoder_model(
         # Use directory under language first
         for voices_dir in voices_dirs:
             maybe_model_dir = voices_dir / model_type / model_name
+            _LOGGER.debug(
+                "Checking %s for vocoder %s", maybe_model_dir, name_or_quality
+            )
             if valid_voice_dir(maybe_model_dir):
                 model_dir = maybe_model_dir
                 break

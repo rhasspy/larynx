@@ -1,0 +1,10 @@
+## [1.0.0] - Unrelease
+
+### Added
+
+- Support for a subset of SSML (--ssml flag)
+- Ability to use CUDA (--cuda) and half-precision inference (--half)
+
+### Changed
+
+- Inference is done directly with PyTorch instead of Onnx (slight drop in performance)

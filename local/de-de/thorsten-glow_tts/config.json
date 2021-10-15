@@ -30,7 +30,9 @@
         "min_level_db": -100.0,
         "max_norm": 1.0,
         "clip_norm": true,
-        "symmetric_norm": true
+        "symmetric_norm": true,
+        "do_dynamic_range_compression": true,
+        "convert_db_to_amp": true
     },
     "model": {
         "num_symbols": 54,
