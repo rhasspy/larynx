@@ -38,16 +38,7 @@ COPY download/ /download/
 
 COPY requirements.txt requirements.txt
 
-# Install CPU-only PyTorch to save space
-RUN --mount=type=cache,id=pip-requirements,target=/root/.cache/pip \
-    if [ "${TARGETARCH}${TARGETVARIANT}" = 'amd64' ]; then \
-        grep '^torch' requirements.txt | \
-        sed -e 's/~=/==/' -e 's/$/+cpu/' | \
-        xargs .venv/bin/pip3 install \
-        -f 'https://download.pytorch.org/whl/cpu/torch_stable.html' ; \
-    fi
-
-# Install base Python requirements
+# Install base Python requirements (excluding PyTorch)
 RUN --mount=type=cache,id=pip-requirements,target=/root/.cache/pip \
     grep -v '^torch' requirements.txt | \
     xargs .venv/bin/pip3 install \
@@ -69,7 +60,7 @@ RUN --mount=type=cache,id=apt-run,target=/var/cache/apt \
     mkdir -p /var/cache/apt/${TARGETARCH}${TARGETVARIANT}/archives/partial && \
     apt-get update && \
     apt-get install --yes --no-install-recommends \
-        python3 sox
+        python3 sox ncdu
 
 # Clean up
 RUN rm -f /etc/apt/apt.conf.d/01cache

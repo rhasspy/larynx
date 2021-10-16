@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+import numpy as np
+
 if typing.TYPE_CHECKING:
-    # Only import here if type checking
     import onnxruntime
-    import numpy as np
-    import torch
+
+ARRAY_OR_TENSOR = typing.Union[np.ndarray, typing.Any]
 
 # -----------------------------------------------------------------------------
 
@@ -66,7 +67,7 @@ class TextToSpeechModel(ABC):
 
     def phonemes_to_mels(
         self, phoneme_ids: np.ndarray, settings: typing.Optional[SettingsType] = None
-    ) -> typing.Union[np.ndarray, torch.Tensor]:
+    ) -> ARRAY_OR_TENSOR:
         """Convert phoneme ids to mel spectrograms"""
         pass
 
@@ -93,9 +94,7 @@ class VocoderModel(ABC):
         pass
 
     def mels_to_audio(
-        self,
-        mels: typing.Union[np.ndarray, torch.Tensor],
-        settings: typing.Optional[SettingsType] = None,
+        self, mels: ARRAY_OR_TENSOR, settings: typing.Optional[SettingsType] = None,
     ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
         pass

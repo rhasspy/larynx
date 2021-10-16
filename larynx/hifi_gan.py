@@ -1,23 +1,29 @@
 """Code for HiFi-GAN vocoder"""
 import concurrent.futures
+import json
 import logging
 import typing
 from concurrent.futures import Executor, Future
 
 import numpy as np
 import onnxruntime
-import torch
 
-from hifi_gan.checkpoint import load_checkpoint
-from hifi_gan.config import TrainingConfig
-from hifi_gan.models import Generator
 from larynx.audio import audio_float_to_int16, inverse, transform
 from larynx.constants import (
+    ARRAY_OR_TENSOR,
     InferenceBackend,
     SettingsType,
     VocoderModel,
     VocoderModelConfig,
 )
+
+try:
+    import torch
+
+    torch_available = True
+except ImportError:
+    torch_available = False
+
 
 _LOGGER = logging.getLogger("hifi_gan")
 
@@ -32,41 +38,46 @@ class HiFiGanVocoder(VocoderModel):
         self.half = config.half
 
         self.onnx_model: typing.Optional[onnxruntime.InferenceSession] = None
-        self.pytorch_model: typing.Optional[Generator] = None
+        self.pytorch_model: typing.Optional[typing.Any] = None
 
         # Load model
         onnx_path = config.model_path / "generator.onnx"
         pytorch_path = config.model_path / "generator.pth"
         backend = InferenceBackend.ONNX
+        generator_path = onnx_path
 
-        if config.backend == InferenceBackend.PYTORCH:
-            # Force PyTorch
-            generator_path = pytorch_path
-            backend = InferenceBackend.PYTORCH
-        elif config.backend == InferenceBackend.ONNX:
-            # Force Onxx
-            generator_path = onnx_path
-            backend = InferenceBackend.ONNX
-        else:
-            # Choose based on settings/availability
-            if self.use_cuda and pytorch_path.is_file():
-                # Prefer PyTorch model (supports CUDA)
+        if torch_available:
+            if config.backend == InferenceBackend.PYTORCH:
+                # Force PyTorch
                 generator_path = pytorch_path
                 backend = InferenceBackend.PYTORCH
-            else:
-                # Prefer Onnx model (faster inference)
+            elif config.backend == InferenceBackend.ONNX:
+                # Force Onxx
                 generator_path = onnx_path
                 backend = InferenceBackend.ONNX
+            else:
+                # Choose based on settings/availability
+                if self.use_cuda and pytorch_path.is_file():
+                    # Prefer PyTorch model (supports CUDA)
+                    generator_path = pytorch_path
+                    backend = InferenceBackend.PYTORCH
+                else:
+                    # Prefer Onnx model (faster inference)
+                    generator_path = onnx_path
+                    backend = InferenceBackend.ONNX
 
         config_path = generator_path.parent / "config.json"
 
-        _LOGGER.debug("Loading config from %s", config_path)
-        with open(config_path, "r", encoding="utf-8") as config_file:
-            self.config = TrainingConfig.load(config_file)
-
-        self.mel_channels = self.config.audio.num_mels
-
         if backend == InferenceBackend.PYTORCH:
+            from hifi_gan.checkpoint import load_checkpoint
+            from hifi_gan.config import TrainingConfig
+
+            _LOGGER.debug("Loading config from %s", config_path)
+            with open(config_path, "r", encoding="utf-8") as config_file:
+                self.config = TrainingConfig.load(config_file)
+
+                self.mel_channels = self.config.audio.num_mels
+
             # Load PyTorch model
             _LOGGER.debug(
                 "Loading HiFi-GAN PyTorch model from %s (CUDA=%s, half=%s)",
@@ -92,6 +103,13 @@ class HiFiGanVocoder(VocoderModel):
             self.onnx_model = onnxruntime.InferenceSession(
                 str(generator_path), sess_options=config.session_options
             )
+
+            with open(config_path, "r", encoding="utf-8") as config_file:
+                model_config = json.load(config_file)
+                self.mel_channels = int(
+                    model_config.get("audio", {}).get("num_mels", "80")
+                )
+
         else:
             raise ValueError(f"Unknown backend: {backend}")
 
@@ -110,13 +128,13 @@ class HiFiGanVocoder(VocoderModel):
                 self.maybe_init_denoiser()
 
     def mels_to_audio(
-        self,
-        mels: typing.Union[np.ndarray, torch.Tensor],
-        settings: typing.Optional[SettingsType] = None,
+        self, mels: ARRAY_OR_TENSOR, settings: typing.Optional[SettingsType] = None,
     ) -> np.ndarray:
         """Convert mel spectrograms to WAV audio"""
         if self.pytorch_model is not None:
             # Inference with PyTorch
+            assert isinstance(mels, torch.Tensor)
+
             if self.use_cuda:
                 mels = mels.cuda()
 
@@ -126,6 +144,9 @@ class HiFiGanVocoder(VocoderModel):
             audio = audio.squeeze(0).cpu().numpy()
         else:
             # Inference with Onnx
+            assert self.onnx_model is not None
+            assert isinstance(mels, np.ndarray)
+
             audio = self.onnx_model.run(None, {"mel": mels})[0].squeeze(0)
 
         denoiser_strength = self.denoiser_strength

@@ -4,17 +4,22 @@ import typing
 
 import numpy as np
 import onnxruntime
-import torch
 
-from glow_tts.checkpoint import load_checkpoint
-from glow_tts.config import TrainingConfig
-from glow_tts.models import FlowGenerator
 from larynx.constants import (
+    ARRAY_OR_TENSOR,
     InferenceBackend,
     SettingsType,
     TextToSpeechModel,
     TextToSpeechModelConfig,
 )
+
+try:
+    import torch
+
+    torch_available = True
+except ImportError:
+    torch_available = False
+
 
 _LOGGER = logging.getLogger("glow_tts")
 
@@ -26,7 +31,7 @@ class GlowTextToSpeech(TextToSpeechModel):
         super().__init__(config)
 
         self.onnx_model: typing.Optional[onnxruntime.InferenceSession] = None
-        self.pytorch_model: typing.Optional[FlowGenerator] = None
+        self.pytorch_model: typing.Optional[typing.Any] = None
 
         self.use_cuda = config.use_cuda
 
@@ -34,33 +39,39 @@ class GlowTextToSpeech(TextToSpeechModel):
         onnx_path = config.model_path / "generator.onnx"
         pytorch_path = config.model_path / "generator.pth"
         backend = InferenceBackend.ONNX
+        generator_path = onnx_path
 
-        if config.backend == InferenceBackend.PYTORCH:
-            # Force PyTorch
-            generator_path = pytorch_path
-            backend = InferenceBackend.PYTORCH
-        elif config.backend == InferenceBackend.ONNX:
-            # Force Onxx
-            generator_path = onnx_path
-            backend = InferenceBackend.ONNX
-        else:
-            # Choose based on settings/availability
-            if self.use_cuda and pytorch_path.is_file():
-                # Prefer PyTorch model (supports CUDA)
+        if torch_available:
+            if config.backend == InferenceBackend.PYTORCH:
+                # Force PyTorch
                 generator_path = pytorch_path
                 backend = InferenceBackend.PYTORCH
-            else:
-                # Prefer Onnx model (faster inference)
+            elif config.backend == InferenceBackend.ONNX:
+                # Force Onxx
                 generator_path = onnx_path
                 backend = InferenceBackend.ONNX
+            else:
+                # Choose based on settings/availability
+                if self.use_cuda and pytorch_path.is_file():
+                    # Prefer PyTorch model (supports CUDA)
+                    generator_path = pytorch_path
+                    backend = InferenceBackend.PYTORCH
+                else:
+                    # Prefer Onnx model (faster inference)
+                    generator_path = onnx_path
+                    backend = InferenceBackend.ONNX
 
         config_path = generator_path.parent / "config.json"
 
-        _LOGGER.debug("Loading config from %s", config_path)
-        with open(config_path, "r", encoding="utf-8") as config_file:
-            self.config = TrainingConfig.load(config_file)
-
         if backend == InferenceBackend.PYTORCH:
+            # Load PyTorch checkpoint
+            from glow_tts.checkpoint import load_checkpoint
+            from glow_tts.config import TrainingConfig
+
+            _LOGGER.debug("Loading config from %s", config_path)
+            with open(config_path, "r", encoding="utf-8") as config_file:
+                self.config = TrainingConfig.load(config_file)
+
             # Load PyTorch model
             _LOGGER.debug(
                 "Loading GlowTTS PyTorch model from %s (CUDA=%s, half=%s)",
@@ -97,7 +108,7 @@ class GlowTextToSpeech(TextToSpeechModel):
 
     def phonemes_to_mels(
         self, phoneme_ids: np.ndarray, settings: typing.Optional[SettingsType] = None
-    ) -> typing.Union[np.ndarray, torch.Tensor]:
+    ) -> ARRAY_OR_TENSOR:
         """Convert phoneme ids to mel spectrograms"""
         # Convert to tensors
         noise_scale = self.noise_scale
