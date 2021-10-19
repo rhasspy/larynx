@@ -60,7 +60,7 @@ RUN --mount=type=cache,id=apt-run,target=/var/cache/apt \
     mkdir -p /var/cache/apt/${TARGETARCH}${TARGETVARIANT}/archives/partial && \
     apt-get update && \
     apt-get install --yes --no-install-recommends \
-        python3 sox
+        python3 sox ca-certificates
 
 RUN --mount=type=cache,id=apt-run,target=/var/cache/apt \
     if [ "${TARGETARCH}${TARGETVARIANT}" = 'armv7' ]; then \
