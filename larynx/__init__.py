@@ -131,6 +131,17 @@ def text_to_speech(
 
         _LOGGER.debug("%s %s %s", sentence.text, sent_phonemes, sent_phoneme_ids)
 
+        # Add pauses from SSML <break> tags
+        pause_before_ms = sentence.pause_before_ms
+        if sentence.words:
+            # Add pause from first word
+            pause_before_ms += sentence.words[0].pause_before_ms
+
+        pause_after_ms = sentence.pause_after_ms
+        if sentence.words:
+            # Add pause from last word
+            pause_after_ms += sentence.words[-1].pause_after_ms
+
         # Convert phonemes to audio
         future = executor.submit(
             _sentence_task,
@@ -141,14 +152,36 @@ def text_to_speech(
             tts_settings,
             vocoder_model,
             vocoder_settings,
-            pause_before_ms=sentence.pause_before_ms,
-            pause_after_ms=sentence.pause_after_ms,
+            pause_before_ms=pause_before_ms,
+            pause_after_ms=pause_after_ms,
         )
+
+        marks_before = []
+        if sentence.marks_before:
+            marks_before.extend(sentence.marks_before)
+
+        marks_after = []
+        if sentence.marks_after:
+            marks_after.extend(sentence.marks_after)
+
+        # Marks before the first word are added to the "before" list for the sentence.
+        # All other word marks after added to the "after" list.
+        for word_idx, word in enumerate(sentence):
+            if word.marks_before:
+                if word_idx == 0:
+                    marks_before.extend(word.marks_before)
+                else:
+                    marks_after.extend(word.marks_before)
+
+            if word.marks_after:
+                marks_after.extend(word.marks_after)
 
         futures[future] = TextToSpeechResult(
             text=sentence.text_with_ws,
             audio=None,
             sample_rate=audio_settings.sample_rate,
+            marks_before=marks_before,
+            marks_after=marks_after,
         )
 
     for future, result in futures.items():

@@ -12,6 +12,36 @@ Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi
 
 ![Larynx screenshot](img/web_screenshot.png)
 
+Supports a [subset of SSML](#ssml) that can use multiple voices and languages!
+
+``` xml
+<speak>
+  The 1st thing to remember is that 9 languages are supported in Larynx TTS as of 10/19/2021 at 10:39am.
+
+  <voice name="harvard">
+    <s>
+      The current voice can be changed!
+    </s>
+  </voice>
+
+  <voice name="northern_english_male">
+    <s>Breaks are possible</s>
+    <break time="0.5s" />
+    <s>between sentences.</s>
+  </voice>
+
+  <s lang="en">
+    One language is never enough
+  </s>
+  <s lang="de">
+   Eine Sprache ist niemals genug
+  </s>
+  <s lang="sw">
+    Lugha moja haitoshi
+  </s>
+</speak>
+```
+
 Larynx's goals are:
 
 * "Good enough" synthesis to avoid using a cloud service
@@ -99,6 +129,33 @@ Voices and vocoders are automatically downloaded when used on the command-line o
 
 ---
 
+## SSML
+
+A subset of [SSML](https://www.w3.org/TR/speech-synthesis11/) is supported (use `--ssml`):
+
+* `<speak>` - wrap around SSML text
+    * `lang` - set language for document
+* `<s>` - sentence (disables automatic sentence breaking)
+    * `lang` - set language for sentence
+* `<w>` / `<token>` - word (disables automatic tokenization)
+* `<voice name="...">` - set voice of inner text
+    * `voice` - name or language of voice
+* `<say-as interpret-as="">` - force interpretation of inner text
+    * `interpret-as` one of "spell-out", "date", "number", "time", or "currency"
+    * `format` - way to format text depending on `interpret-as`
+        * number - one of "cardinal", "ordinal", "digits", "year"
+        * date - string with "d" (cardinal day), "o" (ordinal day), "m" (month), or "y" (year)
+* `<break time="">` - Pause for given amount of time
+    * time - seconds ("123s") or milliseconds ("123ms")
+* `<mark name="">` - User-defined mark (written to `--mark-file` or part of `TextToSpeechResult`)
+    * name - name of mark
+* `<sub alias="">` - substitute `alias` for inner text
+* `<phoneme ph="...">` - supply phonemes for inner text
+    * `ph` - phonemes for each word of inner text, separated by whitespace
+    * `alphabet` - if "ipa", phonemes are intelligently split ("aːˈb" -> "aː", "ˈb")
+
+--
+
 ## Command-Line Interface
 
 Larynx has a flexible command-line interface, available with:
@@ -116,6 +173,20 @@ larynx -v <VOICE> "<TEXT>" > output.wav
 where `<VOICE>` is a language name (`en`, `de`, etc) or a voice name (`ljspeech`, `thorsten`, etc). `<TEXT>` may contain multiple sentences, which will be combined in the final output WAV file. These can also be [split into separate WAV files](#multiple-wav-output).
 
 To adjust the quality of the output, use `-q <QUALITY>` where `<QUALITY>` is "high" (slowest), "medium", or "low" (fastest).
+
+### SSML Synthesis
+
+```sh
+larynx --ssml -v <VOICE> "<SSML>" > output.wav
+```
+
+where `<SSML>` is valid [SSML](https://www.w3.org/TR/speech-synthesis11/). Not all features are supported; for example:
+
+* Breaks (pauses) can only occur between sentences and can only be specified in seconds or milliseconds
+* Voices can only be referenced by name
+* Custom lexicons are not yet supported (you can use `<phoneme ph="...">`, however)
+
+If you SSML contains `<mark>` tags, add `--mark-file <FILE>` to the command-line. As the marks are encountered (between sentences), their names will be written on separate lines to the file.
 
 ### Long Texts
 
@@ -171,63 +242,6 @@ Hello world!<ENTER>
 ```
 
 Use `CTRL+D` or `CTRL+C` to exit.
-
-### Inline Pronunciations
-
-If you want more control over a word's pronunciation, you can enable inline pronunciations in your sentences with the `--inline` flag. There are two different syntaxes, with different purposes:
-
-* Brackets - `[[ p h o n e m e s ]]`
-* Curly Braces - `{{ words with s{eg}m{ent}s }}`
-
-The "brackets" syntax allows you to directly insert phonemes for a word. See [gruut-ipa](https://github.com/rhasspy/gruut-ipa) for the list of phonemes in your desired language. Some substitutions are automatically made for you:
-
-1. Primary and secondary stress can be given with the apostrophe (`'`) and comma (`,`)
-2. Elongation can be given with a colon (`:`)
-3. Ties will be added, if necessary (e.g., `tʃ` becomes `t͡ʃ`)
-
-The "curly brackets" syntax lets you sound out a word using other words (or segments of other words). For example, "Beyoncé" could be written as directly with phonemes as `[[ b ˈi j ˈɔ n s ˈeɪ ]]`. A more natural way, however, is to use a combination of words: `{{ bee yawn say }}`. From the curly brackets, Larynx will look up each word's pronunciation in the lexicon (or guess it), and combine all of the resulting phonemes. You may include phonemes inside the curly brackets as well with the syntax `/p h o n e m e s/` alongside other words.
-
-An even more useful aspect of the "curly brackets" syntax is using **word segments**. For most words in its lexicons, Larynx has an alignment between its graphemes and phonemes. This enables you do insert *partial* pronunciations of words, such as the "zure" in "azure", with `a{zure}`. You can even have multiple segments from a single word! For example, `{{ {mic}roph{one} }}` will produce phonemes sounding like "mike own".
-
-Phonemes example:
-
-```sh
-larynx -v en --inline "[[ b ˈi j ˈɔ n s ˈeɪ ]]" | aplay
-```
-
-Words example:
-
-```sh
-larynx -v en --inline '{{ bee yawn say }}' | aplay
-```
-
-Multiple word segments [example](https://tardis.fandom.com/wiki/Raxacoricofallapatorius):
-
-```sh
-# raxacoricofallipatorius
-larynx -v en --inline '{{ racks uh core {i}t {co}de {fall}{i}ble {pu}n tore s{ee} us }}' | aplay
-```
-
-### Custom Lexicons
-
-Use the `--lexicon` option to `larynx` and `larynx-server` to include a file with your custom word pronunciations (for `larynx-server` add a lexicon for each language with `--lexicon <LANGUAGE> <LEXICON>`). The format of the lexicon file is:
-
-```
-word phoneme phoneme ...
-word phoneme phoneme ...
-```
-
-Using the example from above, you could have:
-
-```
-beyoncé b ˈi j ˈɔ n s ˈeɪ
-```
-
-The inline pronunciation format is supported here, so may also have entries like this:
-
-```
-beyoncé {{ bee yawn say }}
-```
 
 ### GlowTTS Settings
 
@@ -334,8 +348,6 @@ For example: `en;low` will use the lowest quality (but fastest) vocoder. This is
         * hajdurova (F, [M-AILabs](licenses/m-ailabs.txt))
         * nikolaev (M, [M-AILabs](licenses/m-ailabs.txt))
         * minaev (M, [M-AILabs](licenses/m-ailabs.txt))
-* [Tacotron2](https://github.com/rhasspy/tacotron2-train)
-    * Coming someday
 
 ## Vocoders
 
@@ -343,8 +355,6 @@ For example: `en;low` will use the lowest quality (but fastest) vocoder. This is
     * Universal large (slowest)
     * VCTK "small"
     * VCTK "medium" (fastest)
-* [WaveGlow](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/SpeechSynthesis/Tacotron2)
-    * 256 channel trained on LJ Speech
     
 ---
 

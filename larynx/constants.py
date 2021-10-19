@@ -110,3 +110,5 @@ class TextToSpeechResult:
     text: str
     audio: typing.Optional[np.ndarray]
     sample_rate: int
+    marks_before: typing.Optional[typing.Sequence[str]] = None
+    marks_after: typing.Optional[typing.Sequence[str]] = None

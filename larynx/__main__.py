@@ -146,6 +146,16 @@ def main():
     if args.output_dir:
         args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Open file for writing the names from <mark> tags in SSML.
+    # Each name is printed on a single line.
+    mark_writer: typing.Optional[typing.TextIO] = None
+    if args.mark_file:
+        args.mark_file = Path(args.mark_file)
+        args.mark_file.parent.mkdir(parents=True, exist_ok=True)
+        mark_writer = open(  # pylint: disable=consider-using-with
+            args.mark_file, "w", encoding="utf-8"
+        )
+
     if args.seed is not None:
         _LOGGER.debug("Setting random seed to %s", args.seed)
         np.random.seed(args.seed)
@@ -286,6 +296,11 @@ def main():
 
                 sample_rate = result.sample_rate
 
+                # Write before marks
+                if result.marks_before and mark_writer:
+                    for mark_name in result.marks_before:
+                        print(mark_name, file=mark_writer)
+
                 if args.raw_stream:
                     assert raw_queue is not None
                     raw_queue.put(result.audio.tobytes())
@@ -351,6 +366,11 @@ def main():
                 else:
                     # Combine all audio and output to stdout at the end
                     all_audios.append(result.audio)
+
+                # Write after marks
+                if result.marks_after and mark_writer:
+                    for mark_name in result.marks_after:
+                        print(mark_name, file=mark_writer)
 
     except KeyboardInterrupt:
         if raw_queue is not None:
@@ -431,6 +451,10 @@ def get_args():
         help="Play audio after each input line (see --play-command)",
     )
     parser.add_argument("--csv", action="store_true", help="Input format is id|text")
+    parser.add_argument(
+        "--mark-file",
+        help="File to write mark names to as they're encountered (--ssml only)",
+    )
 
     # GlowTTS setttings
     parser.add_argument(
@@ -460,7 +484,6 @@ def get_args():
         type=int,
         help="Maximum number of threads to concurrently load models and run sentences through TTS/Vocoder",
     )
-
     parser.add_argument(
         "--no-download",
         action="store_true",
