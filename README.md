@@ -93,12 +93,12 @@ Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi
 
 ## Debian Installation
 
-Pre-built Debian packages are [available for download](https://github.com/rhasspy/larynx/releases/tag/v0.5) with the name `larynx-tts_<VERSION>_<ARCH>.deb` where `ARCH` is one of `amd64` (most desktops, laptops), `armhf` (32-bit Raspberry Pi), and `arm64` (64-bit Raspberry Pi)
+Pre-built Debian packages are [available for download](https://github.com/rhasspy/larynx/releases/latest) with the name `larynx-tts_<VERSION>_<ARCH>.deb` where `ARCH` is one of `amd64` (most desktops, laptops), `armhf` (32-bit Raspberry Pi), and `arm64` (64-bit Raspberry Pi)
     
 Example installation on a typical desktop:
 
 ```sh
-sudo apt install ./larynx-tts_0.5.0_amd64.deb
+sudo apt install ./larynx-tts_<VERSION>_amd64.deb
 ```
 
 From there, you may run the `larynx` command or `larynx-server` to start the web server (http://localhost:5002).

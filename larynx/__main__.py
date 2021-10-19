@@ -144,6 +144,7 @@ def main():
 
     # Create output directory
     if args.output_dir:
+        args.output_dir = Path(args.output_dir)
         args.output_dir.mkdir(parents=True, exist_ok=True)
 
     # Open file for writing the names from <mark> tags in SSML.
@@ -268,6 +269,10 @@ def main():
             if not line:
                 continue
 
+            if args.output_naming == OutputNaming.ID:
+                # Line has the format id|text instead of just text
+                line_id, line = line.split(args.id_delimiter, maxsplit=1)
+
             tts_results = text_to_speech(
                 text=line,
                 voice_or_lang=args.voice,
@@ -287,6 +292,8 @@ def main():
             text_id = ""
 
             for result_idx, result in enumerate(tts_results):
+                text = result.text
+
                 if result_idx == 0:
                     end_time_to_first_audio = time.perf_counter()
                     _LOGGER.debug(
@@ -340,7 +347,7 @@ def main():
                         # Determine file name
                         if args.output_naming == OutputNaming.TEXT:
                             # Use text itself
-                            file_name = text.replace("", "_")
+                            file_name = text.strip().replace(" ", "_")
                             file_name = file_name.translate(
                                 str.maketrans(
                                     "", "", string.punctuation.replace("_", "")
@@ -360,7 +367,7 @@ def main():
                         assert file_name, f"No file name for text: {text}"
                         wav_path = args.output_dir / (file_name + ".wav")
                         with open(wav_path, "wb") as wav_file:
-                            wav_write(wav_file, args.sample_rate, result.audio)
+                            wav_write(wav_file, sample_rate, result.audio)
 
                         _LOGGER.debug("Wrote %s", wav_path)
                 else:
