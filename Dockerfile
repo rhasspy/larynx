@@ -60,7 +60,12 @@ RUN --mount=type=cache,id=apt-run,target=/var/cache/apt \
     mkdir -p /var/cache/apt/${TARGETARCH}${TARGETVARIANT}/archives/partial && \
     apt-get update && \
     apt-get install --yes --no-install-recommends \
-        python3 sox ncdu
+        python3 sox
+
+RUN --mount=type=cache,id=apt-run,target=/var/cache/apt \
+    if [ "${TARGETARCH}${TARGETVARIANT}" = 'armv7' ]; then \
+        apt-get install --yes --no-install-recommends libatlas3-base libgfortran5; \
+    fi
 
 # Clean up
 RUN rm -f /etc/apt/apt.conf.d/01cache
