@@ -1,62 +1,38 @@
 # -----------------------------------------------------------------------------
-# Python 3.7
+# Dockerfile for Debian package of Larynx (https://github.com/rhasspy/larynx)
+#
+# Requires Docker buildx: https://docs.docker.com/buildx/working-with-buildx/
+# See scripts/build-docker.sh
 # -----------------------------------------------------------------------------
-
-FROM debian:buster-slim as python37
-ARG TARGETARCH
-ARG TARGETVARIANT
-
-ENV LANG C.UTF-8
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN echo "Dir::Cache var/cache/apt/${TARGETARCH}${TARGETVARIANT};" > /etc/apt/apt.conf.d/01cache
-
-RUN --mount=type=cache,id=apt-python,target=/var/cache/apt \
-    mkdir -p /var/cache/apt/${TARGETARCH}${TARGETVARIANT}/archives/partial && \
-    apt-get update && \
-    apt-get install --yes --no-install-recommends \
-        build-essential \
-        git zlib1g-dev patchelf rsync \
-        libncursesw5-dev libreadline-gplv2-dev libssl-dev \
-        libgdbm-dev libc6-dev libsqlite3-dev libbz2-dev libffi-dev
-
-ADD download/Python-3.7.10.tar.xz /build
-
-RUN cd /build/Python-3.7.10 && \
-    ./configure && \
-    make -j 4 && \
-    make install DESTDIR=/usr/lib/larynx-tts
-
-# -----------------------------------------------------------------------------
-# OpenTTS
-# -----------------------------------------------------------------------------
-
-FROM debian:buster-slim as build
+FROM debian:bullseye as build
 ARG TARGETARCH
 ARG TARGETVARIANT
 
 RUN echo "Dir::Cache var/cache/apt/${TARGETARCH}${TARGETVARIANT};" > /etc/apt/apt.conf.d/01cache
 
 RUN --mount=type=cache,id=apt-build,target=/var/cache/apt \
+    mkdir -p /var/cache/apt/${TARGETARCH}${TARGETVARIANT}/archives/partial && \
     apt-get update && \
     apt-get install --yes --no-install-recommends \
-        build-essential libssl1.1 dpkg-dev
+        build-essential libssl1.1 dpkg-dev python3 python3-pip python3-venv python3-dev
 
 ENV APP_DIR=/usr/lib/larynx-tts
 
-COPY --from=python37 ${APP_DIR}/ ${APP_DIR}/
-COPY --from=python37 ${APP_DIR}/usr/local/include/python3.7m/ /usr/include/
-ENV PYTHON=${APP_DIR}/usr/local/bin/python3
-
+RUN python3 -m venv ${APP_DIR}
+ENV PYTHON ${APP_DIR}/bin/python3
 RUN --mount=type=cache,id=pip-build,target=/root/.cache/pip \
-    ${PYTHON} -m pip install --upgrade 'pip<=20.2.4' && \
+    ${PYTHON} -m pip install --upgrade pip && \
     ${PYTHON} -m pip install --upgrade wheel setuptools
 
-# Install Python packages
 COPY download/ /download/
-COPY requirements.txt ${APP_DIR}/larynx/
-RUN cd ${APP_DIR}/larynx && \
-    ${PYTHON} -m pip install -f /download -r requirements.txt
+COPY requirements.txt ${APP_DIR}/
+
+RUN --mount=type=cache,id=pip-build,target=/root/.cache/pip \
+    cat ${APP_DIR}/requirements.txt | \
+    grep -v '^torch' | \
+    xargs ${PYTHON} -m pip install \
+        -f /download/ \
+        -f 'https://synesthesiam.github.io/prebuilt-apps/'
 
 # Create Debian package
 ENV BUILD_DIR=/build
@@ -75,11 +51,12 @@ COPY README.md LICENSE ${BUILD_APP_DIR}/
 
 COPY debian/control.in /
 
-ARG TARGETARCH
-ARG TARGETVARIANT
 ENV DEBIAN_ARCH=${TARGETARCH}${TARGETVARIANT}
 RUN export VERSION="$(cat ${BUILD_DIR}/larynx-tts/${APP_DIR}/larynx/VERSION)" && \
-    if [ "${DEBIAN_ARCH}" = 'armv7' ]; then export DEBIAN_ARCH='armhf'; fi && \
+    if [ "${DEBIAN_ARCH}" = 'armv7' ]; then \
+        export DEBIAN_ARCH='armhf'&& \
+        sed -i 's/^Depends: /Depends: libatlas3-base,libgfortran5,/' /control.in ; \
+    fi && \
     mkdir -p ${BUILD_DIR}/larynx-tts/DEBIAN && \
     sed -e s"/@VERSION@/${VERSION}/" -e "s/@DEBIAN_ARCH@/${DEBIAN_ARCH}/" < /control.in > ${BUILD_DIR}/larynx-tts/DEBIAN/control
 
@@ -94,10 +71,6 @@ RUN cd ${BUILD_DIR} && \
 
 # -----------------------------------------------------------------------------
 
-# IFDEF NOBUILDX
-FROM debian:buster-slim
-# ELSE
 FROM scratch
-# ENDIF
 
 COPY --from=build /build/*.deb /

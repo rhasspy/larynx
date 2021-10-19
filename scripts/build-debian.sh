@@ -24,70 +24,13 @@ out_version="${version}"
 
 echo 'Building...'
 
-# Write .dockerignore file
-DOCKERIGNORE="${src_dir}/.dockerignore"
-cp -f "${src_dir}/.dockerignore.in" "${DOCKERIGNORE}"
-
-declare -A debian_arch
-debian_arch['armv7']='armhf'
-
-if [[ -n "${NOBUILDX}" ]]; then
-    # Don't use docker buildx (single platform)
-
-    if [[ -z "${TARGETARCH}" ]]; then
-        # Guess architecture
-        cpu_arch="$(uname -m)"
-        case "${cpu_arch}" in
-            armv7l)
-                export TARGETARCH=arm
-                export TARGETVARIANT=v7
-                ;;
-
-            aarch64|arm64v8)
-                export TARGETARCH=arm64
-                export TARGETVARIANT=''
-                ;;
-
-            *)
-                # Assume x86_64
-                export TARGETARCH=amd64
-                export TARGETVARIANT=''
-                ;;
-        esac
-
-        echo "Guessed architecture: ${TARGETARCH}${TARGETVARIANT}"
-    fi
-
-    tag="rhasspy/rhasspy:debian-${TARGETARCH}${TARGETVARIANT}"
-    docker build \
-           "${src_dir}" \
-           -f "${DOCKERFILE}" \
-           --build-arg "TARGETARCH=${TARGETARCH}" \
-           --build-arg "TARGETVARIANT=${TARGETVARIANT}" \
-           --tag "${tag}" \
-           "$@"
-
-    # Determine directory to copy .deb file into
-    if [[ -z "${TARGETVARIANT}" ]]; then
-        output_dir="${dist_dir}/linux_${TARGETARCH}"
-    else
-        output_dir="${dist_dir}/linux_${TARGETARCH}_${TARGETVARIANT}"
-    fi
-
-    mkdir -p "${output_dir}"
-    deb_path="$(docker run --rm "${tag}" /bin/sh -c 'ls -1 /*.deb' | head -n1)"
-    echo "Copying ${deb_path} to ${output_dir}"
-    docker cp "$(docker create --rm "${tag}"):${deb_path}" "${output_dir}/"
-else
-    # Use docker buildx (multi-platform)
-    docker buildx build \
-           "${src_dir}" \
-           -f "${DOCKERFILE}" \
-           --build-arg "DEBIAN_ARCH=${DEBIAN_ARCH}" \
-           "--platform=${PLATFORMS}" \
-           --output "type=local,dest=${dist_dir}" \
-           "$@"
-fi
+# Use docker buildx (multi-platform)
+docker buildx build \
+        "${src_dir}" \
+        -f "${DOCKERFILE}" \
+        "--platform=${PLATFORMS}" \
+        --output "type=local,dest=${dist_dir}" \
+        "$@"
 
 # Manually copy out
 in_amd64="${dist_dir}/linux_amd64/rhasspy_${version}_amd64.deb"

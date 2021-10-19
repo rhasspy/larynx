@@ -105,7 +105,19 @@ From there, you may run the `larynx` command or `larynx-server` to start the web
 
 ## Python Installation
 
-Start by creating a virtual environment:
+You may need to install the following dependencies (besides Python 3.7+):
+
+```sh
+sudo apt-get install libopenblas-base libgomp1 libatomic1
+```
+
+On 32-bit ARM systems (Raspberry Pi), you will also need:
+
+```sh
+sudo apt-get install libatlas3-base libgfortran5
+```
+
+Next, create a Python virtual environment:
 
 ```sh
 python3 -m venv larynx_venv
