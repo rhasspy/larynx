@@ -95,7 +95,7 @@ Visit http://localhost:5002 for the test page. See http://localhost:5002/openapi
 
 ## Debian Installation
 
-Pre-built Debian packages are [available for download](https://github.com/rhasspy/larynx/releases/latest) with the name `larynx-tts_<VERSION>_<ARCH>.deb` where `ARCH` is one of `amd64` (most desktops, laptops), `armhf` (32-bit Raspberry Pi), and `arm64` (64-bit Raspberry Pi)
+Pre-built Debian packages for [bullseye](https://www.debian.org/releases/bullseye/) are [available for download](https://github.com/rhasspy/larynx/releases/latest) with the name `larynx-tts_<VERSION>_<ARCH>.deb` where `ARCH` is one of `amd64` (most desktops, laptops), `armhf` (32-bit Raspberry Pi), and `arm64` (64-bit Raspberry Pi)
     
 Example installation on a typical desktop:
 
