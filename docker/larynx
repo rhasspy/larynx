@@ -35,7 +35,7 @@ fi
             -w "${PWD}" \
             --device /dev/snd:/dev/snd \
             --user "$(id -u):$(id -g)" "${docker_run_args[@]}" \
-            --entrypoint '/app/.venv/bin/python3' \
+            --entrypoint '/home/larynx/app/.venv/bin/python3' \
             "rhasspy/larynx:${tag}" \
             -m larynx \
             "${args[@]}"
