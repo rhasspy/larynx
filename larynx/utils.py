@@ -17,7 +17,7 @@ _ENV_VOICES_DIR = "LARYNX_VOICES_DIR"
 
 # Format string for downloading voices
 DEFAULT_VOICE_URL_FORMAT = (
-    "http://github.com/rhasspy/larynx/releases/download/v1.0.0/{voice}.tar.gz"
+    "http://github.com/rhasspy/larynx/releases/download/v1.0/{voice}.tar.gz"
 )
 
 # Directory names that contain vocoders instead of voices
