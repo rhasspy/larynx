@@ -200,7 +200,7 @@ where `<SSML>` is valid [SSML](https://www.w3.org/TR/speech-synthesis11/). Not a
 * Voices can only be referenced by name
 * Custom lexicons are not yet supported (you can use `<phoneme ph="...">`, however)
 
-If you SSML contains `<mark>` tags, add `--mark-file <FILE>` to the command-line. As the marks are encountered (between sentences), their names will be written on separate lines to the file.
+If your SSML contains `<mark>` tags, add `--mark-file <FILE>` to the command-line. As the marks are encountered (between sentences), their names will be written on separate lines to the file.
 
 ### Long Texts
 
