@@ -277,7 +277,7 @@ Use `CTRL+D` or `CTRL+C` to exit.
 
 The GlowTTS voices support two additional parameters:
 
-* `--noise-scale` - determines the speaker volatility during synthesis (0-1, default is  0.333)
+* `--noise-scale` - determines the speaker volatility during synthesis (0-1, default is  0.667)
 * `--length-scale` - makes the voice speaker slower (> 1) or faster (< 1)
 
 ### Vocoder Settings

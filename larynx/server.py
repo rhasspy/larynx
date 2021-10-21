@@ -89,8 +89,8 @@ parser.add_argument(
 parser.add_argument(
     "--noise-scale",
     type=float,
-    default=0.333,
-    help="Noise scale (voice volatility) used if not set in API call (default: 0.333)",
+    default=0.667,
+    help="Noise scale (voice volatility) used if not set in API call (default: 0.667)",
 )
 parser.add_argument(
     "--length-scale",

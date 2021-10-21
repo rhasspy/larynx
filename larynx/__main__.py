@@ -467,8 +467,8 @@ def get_args():
     parser.add_argument(
         "--noise-scale",
         type=float,
-        default=0.333,
-        help="Noise scale (default: 0.333, GlowTTS only)",
+        default=0.667,
+        help="Noise scale (default: 0.667, GlowTTS only)",
     )
     parser.add_argument(
         "--length-scale",

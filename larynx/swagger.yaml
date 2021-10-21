@@ -41,10 +41,10 @@ paths:
             example: 0.002
         - in: query
           name: noiseScale
-          description: 'Volatility of speaker (0-1, default: 0.333, GlowTTS only)'
+          description: 'Volatility of speaker (0-1, default: 0.667, GlowTTS only)'
           schema:
             type: number
-            example: 0.333
+            example: 0.667
         - in: query
           name: lengthScale
           description: 'Speed of speaker (default: 1.0, faster &lt; 1 &lt; slower, GlowTTS only)'
@@ -96,10 +96,10 @@ paths:
             example: 0.002
         - in: query
           name: noiseScale
-          description: 'Volatility of speaker (0-1, default: 0.333, GlowTTS only)'
+          description: 'Volatility of speaker (0-1, default: 0.667, GlowTTS only)'
           schema:
             type: number
-            example: 0.333
+            example: 0.667
         - in: query
           name: lengthScale
           description: 'Speed of speaker (default: 1.0, faster &lt; 1 &lt; slower, GlowTTS only)'
