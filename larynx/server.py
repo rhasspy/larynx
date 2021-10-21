@@ -485,6 +485,9 @@ async def api_process():
     else:
         vocoder = VocoderQuality.HIGH
 
+    # Assume SSML if text begins with an angle bracket
+    ssml = text.strip().startswith("<")
+
     wav_bytes = await text_to_wav(
         text,
         voice,
@@ -492,6 +495,7 @@ async def api_process():
         denoiser_strength=args.denoiser_strength,
         noise_scale=args.noise_scale,
         length_scale=args.length_scale,
+        ssml=ssml,
     )
 
     return Response(wav_bytes, mimetype="audio/wav")
