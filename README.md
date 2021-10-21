@@ -213,7 +213,7 @@ larynx --cuda 'This is spoken on the GPU.' > output.wav
 Adding the `--half` flag will enable half-precision inference, which is often faster:
 
 ``` sh
-larynx --cuda 'This is spoken on the GPU even faster.' > output.wav
+larynx --cuda --half 'This is spoken on the GPU even faster.' > output.wav
 ```
 
 For CUDA acceleration to work, your voice must contain a PyTorch checkpoint file (`generator.pth`). Older Larynx voices did not have these, so you may need to [re-download your voices](https://github.com/rhasspy/larynx/releases/latest/).
