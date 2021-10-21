@@ -28,7 +28,7 @@ from quart import (
 )
 from swagger_ui import api_doc
 
-from larynx import text_to_speech
+from larynx import __version__, text_to_speech
 from larynx.constants import VocoderQuality
 from larynx.utils import (
     DEFAULT_VOICE_URL_FORMAT,
@@ -509,6 +509,12 @@ async def api_voices():
         lines.append(voice_id)
 
     return "\n".join(lines)
+
+
+@app.route("/version", methods=["GET"])
+async def api_version():
+    """MaryTTS-compatible /version endpoint"""
+    return __version__
 
 
 # -----------------------------------------------------------------------------
