@@ -202,6 +202,22 @@ where `<SSML>` is valid [SSML](https://www.w3.org/TR/speech-synthesis11/). Not a
 
 If your SSML contains `<mark>` tags, add `--mark-file <FILE>` to the command-line. As the marks are encountered (between sentences), their names will be written on separate lines to the file.
 
+### CUDA Accelerated Synthesis
+
+The `--cuda` flag will make use of a GPU if its available to PyTorch:
+
+``` sh
+larynx --cuda 'This is spoken on the GPU.' > output.wav
+```
+
+Adding the `--half` flag will enable half-precision inference, which is often faster:
+
+``` sh
+larynx --cuda 'This is spoken on the GPU even faster.' > output.wav
+```
+
+For CUDA acceleration to work, your voice must contain a PyTorch checkpoint file (`generator.pth`). Older Larynx voices did not have these, so you may need to [re-download your voices](https://github.com/rhasspy/larynx/releases/latest/).
+
 ### Long Texts
 
 If your text is very long, and you would like to listen to it as its being synthesized, use the `--raw-stream` option:
