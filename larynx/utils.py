@@ -36,6 +36,9 @@ VOICE_ALIASES: typing.Dict[str, str] = {}
 # voice -> <name>.tar.gz
 VOICE_DOWNLOAD_NAMES: typing.Dict[str, str] = {}
 
+# voice -> gender
+VOICE_GENDERS: typing.Dict[str, str] = {}
+
 
 def load_voices_aliases():
     """Load voice aliases from VOICES file"""
@@ -54,6 +57,20 @@ def load_voices_aliases():
 
                 VOICE_ALIASES[full_voice_name] = download_name
                 VOICE_DOWNLOAD_NAMES[full_voice_name] = download_name
+
+
+def load_voices_genders():
+    """Load genders from VOICE_GENDERS file"""
+    if not VOICE_GENDERS:
+        # Load voice genders
+        with open(_DIR / "VOICE_GENDERS", "r", encoding="utf-8") as voices_file:
+            for line in voices_file:
+                line = line.strip()
+                if not line:
+                    continue
+
+                full_voice_name, gender = line.split(" ", maxsplit=1)
+                VOICE_GENDERS[full_voice_name] = gender
 
 
 def resolve_voice_name(voice_name: str) -> str:

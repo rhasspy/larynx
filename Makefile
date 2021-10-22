@@ -1,6 +1,6 @@
 SHELL := bash
 
-.PHONY: check clean reformat dist docker amd64 index test
+.PHONY: check clean reformat dist docker index test genders
 
 all: dist
 
@@ -24,3 +24,6 @@ docker:
 
 index:
 	bin/make_sample_html.py local/ > index.html
+
+genders:
+	scripts/get-genders.sh > larynx/VOICE_GENDERS

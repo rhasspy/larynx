@@ -35,9 +35,11 @@ from larynx.utils import (
     VOCODER_DIR_NAMES,
     VOCODER_QUALITY,
     VOICE_DOWNLOAD_NAMES,
+    VOICE_GENDERS,
     download_voice,
     get_voices_dirs,
     load_voices_aliases,
+    load_voices_genders,
     valid_voice_dir,
 )
 from larynx.wavfile import write as wav_write
@@ -504,11 +506,49 @@ async def api_process():
 @app.route("/voices", methods=["GET"])
 async def api_voices():
     """MaryTTS-compatible /voices endpoint"""
-    lines = []
-    for voice_id in get_voices():
-        lines.append(voice_id)
 
-    return "\n".join(lines)
+    load_voices_genders()
+
+    # [voice] [language] [gender] [tech=hmm]
+    lines = []
+
+    # Search for downloaded voices/vocoders
+    for voices_dir in voices_dirs:
+        if not voices_dir.is_dir():
+            continue
+
+        # <LANGUAGE>/<VOICE>-<TTS_SYSTEM>
+        for lang_dir in voices_dir.iterdir():
+            if (not lang_dir.is_dir()) or (lang_dir.name in VOCODER_DIR_NAMES):
+                continue
+
+            # Voice
+            voice_lang = lang_dir.name
+            for voice_model_dir in lang_dir.iterdir():
+                if not valid_voice_dir(voice_model_dir):
+                    continue
+
+                voice_name_tts = voice_model_dir.name
+                full_voice_name = f"{voice_lang}_{voice_name_tts}"
+                voice_name, tts_system = voice_name_tts.split("-", maxsplit=1)
+
+                voice_gender = "NA"  # not available
+                gender_path = voice_model_dir / "GENDER"
+
+                if gender_path.is_file():
+                    # Use GENDER file in voice directory
+                    voice_gender = gender_path.read_text().strip()
+                else:
+                    # Use value from VOICE_GENDERS file
+                    voice_gender = VOICE_GENDERS.get(full_voice_name, voice_gender)
+
+                # Repeat voice for each quality level
+                for quality in VOCODER_QUALITY:
+                    lines.append(
+                        f"{voice_name};{quality} {voice_lang} {voice_gender} {tts_system}"
+                    )
+
+    return "\n".join(sorted(lines))
 
 
 @app.route("/version", methods=["GET"])
