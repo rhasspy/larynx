@@ -83,6 +83,7 @@ docker run \
     -p 5002:5002 \
     -e "HOME=${HOME}" \
     -v "$HOME:${HOME}" \
+    -v /usr/share/ca-certificates:/usr/share/ca-certificates \
     -v /etc/ssl/certs:/etc/ssl/certs \
     -w "${PWD}" \
     --user "$(id -u):$(id -g)" \
@@ -275,6 +276,7 @@ docker run \
     -p 59125:5002 \
     -e "HOME=${HOME}" \
     -v "$HOME:${HOME}" \
+    -v /usr/share/ca-certificates:/usr/share/ca-certificates \
     -v /etc/ssl/certs:/etc/ssl/certs \
     -w "${PWD}" \
     --user "$(id -u):$(id -g)" \

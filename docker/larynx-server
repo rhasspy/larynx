@@ -28,11 +28,15 @@ fi
 
 docker_run_args=()
 
-if [[ -d /etc/ssl/certs ]]; then
+if [[ -d /usr/share/ca-certificates ]]; then
     # Map SSL certs path for downloading voices
-    docker_run_args+=('-v' '/etc/ssl/certs:/etc/ssl/certs')
+    docker_run_args+=('-v' '/usr/share/ca-certificates:/usr/share/ca-certificates')
 fi
 
+if [[ -d /etc/ssl/certs ]]; then
+    # This directory seems to usually have symlinks to /usr/share/ca-certificates
+    docker_run_args+=('-v' '/etc/ssl/certs:/etc/ssl/certs')
+fi
 
 "${docker}" run \
             -it \
