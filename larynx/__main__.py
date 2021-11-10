@@ -42,6 +42,19 @@ class OutputNaming(str, Enum):
     ID = "id"
 
 
+class StdinFormat(str, Enum):
+    """Format of standard input"""
+
+    AUTO = "auto"
+    """Choose based on SSML state"""
+
+    LINES = "lines"
+    """Each line is a separate sentence/document"""
+
+    DOCUMENT = "document"
+    """Entire input is one document"""
+
+
 # -----------------------------------------------------------------------------
 
 
@@ -170,7 +183,18 @@ def main():
         texts = args.text
     else:
         # Use stdin
-        texts = sys.stdin
+        stdin_format = StdinFormat.LINES
+
+        if (args.stdin_format == StdinFormat.AUTO) and args.ssml:
+            # Assume SSML input is entire document
+            stdin_format = StdinFormat.DOCUMENT
+
+        if stdin_format == StdinFormat.DOCUMENT:
+            # One big line
+            texts = [sys.stdin.read()]
+        else:
+            # Multiple lines
+            texts = sys.stdin
 
         if os.isatty(sys.stdin.fileno()):
             print("Reading text from stdin...", file=sys.stderr)
@@ -416,6 +440,12 @@ def get_args():
     )
     parser.add_argument(
         "text", nargs="*", help="Text to convert to speech (default: stdin)"
+    )
+    parser.add_argument(
+        "--stdin-format",
+        choices=[str(v.value) for v in StdinFormat],
+        default=StdinFormat.AUTO,
+        help="Format of stdin text (default: auto)",
     )
     parser.add_argument(
         "--voice",

@@ -8,8 +8,8 @@ from pathlib import Path
 import gruut
 import numpy as np
 import onnxruntime
-
 import phonemes2ids
+
 from larynx.audio import AudioSettings
 from larynx.constants import (
     InferenceBackend,

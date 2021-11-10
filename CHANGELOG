@@ -1,3 +1,10 @@
+## [1.1.0]
+
+### Changed
+
+- With --ssml, input from stdin is assumed to be one document instead of lines (override with --stdin-format lines)
+- Bump gruut to version 2.1 for inline lexicons
+
 ## [1.0.0] - 20 Oct 2021
 
 ### Added
