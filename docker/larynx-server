@@ -28,14 +28,28 @@ fi
 
 docker_run_args=()
 
-if [[ -d /usr/share/ca-certificates ]]; then
-    # Map SSL certs path for downloading voices
-    docker_run_args+=('-v' '/usr/share/ca-certificates:/usr/share/ca-certificates')
-fi
-
 if [[ -d /etc/ssl/certs ]]; then
-    # This directory seems to usually have symlinks to /usr/share/ca-certificates
-    docker_run_args+=('-v' '/etc/ssl/certs:/etc/ssl/certs')
+    # This directory seems to usually have symlinks to other directories
+    docker_run_args+=('-v' '/etc/ssl/certs:/etc/ssl/certs:ro')
+
+    # Create temp file with all certificate directories found
+    cert_dirs_file="$(mktemp)"
+    function finish {
+        rm -rf "${cert_dirs_file}"
+    }
+    trap finish EXIT
+
+    while read -r cert_path; do
+        # Follow symlinks and record directory paths
+        cert_path="$(readlink -f "${cert_path}")"
+        cert_dir="$(dirname "${cert_path}")"
+        echo $cert_dir >> "${cert_dirs_file}"
+    done < <(find /etc/ssl/certs -name '*.pem' -type l)
+
+    # Map unique certificate directories
+    while read -r cert_dir; do
+        docker_run_args+=('-v' "${cert_dir}:${cert_dir}:ro")
+    done < <(sort < "${cert_dirs_file}" | uniq)
 fi
 
 "${docker}" run \
