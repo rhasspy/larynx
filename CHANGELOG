@@ -1,9 +1,9 @@
-## [1.1.0]
+## [1.1.0] - 11 Nov 2021
 
 ### Changed
 
 - With --ssml, input from stdin is assumed to be one document instead of lines (override with --stdin-format lines)
-- Bump gruut to version 2.1 for inline lexicons
+- Bump gruut to version 2.1 for inline lexicons (https://github.com/rhasspy/gruut/#inline-lexicons)
 - Include /usr/share/ca-certificates in Docker scripts
 
 ## [1.0.0] - 20 Oct 2021
