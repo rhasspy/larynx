@@ -116,7 +116,10 @@ def download_voice(
 
     try:
         with urllib.request.urlopen(link) as response:
-            with tempfile.NamedTemporaryFile(mode="wb+", suffix=".tar.gz") as temp_file:
+            temp_file = tempfile.NamedTemporaryFile(mode="wb+", suffix=".tar.gz", delete=False)
+            temp_file_name = temp_file.name
+            
+            try:
                 with tqdm(
                     unit="B",
                     unit_scale=True,
@@ -131,13 +134,13 @@ def download_voice(
                         pbar.update(len(chunk))
                         chunk = response.read(4096)
 
-                temp_file.seek(0)
+                temp_file.close()
 
                 # Extract
                 with tempfile.TemporaryDirectory() as temp_dir_str:
                     temp_dir = Path(temp_dir_str)
-                    _LOGGER.debug("Extracting %s to %s", temp_file.name, temp_dir_str)
-                    shutil.unpack_archive(temp_file.name, temp_dir_str)
+                    _LOGGER.debug("Extracting %s to %s", temp_file_name, temp_dir_str)
+                    shutil.unpack_archive(temp_file_name, temp_dir_str)
 
                     # Expecting <language>/<voice_name>
                     lang_dir = next(temp_dir.iterdir())
@@ -160,6 +163,10 @@ def download_voice(
                     shutil.move(str(voice_dir), str(dest_voice_dir))
 
                     return dest_voice_dir
+            finally:
+                temp_file.close()
+                os.remove(temp_file_name)
+                    
     except HTTPError as e:
         _LOGGER.exception("download_voice")
         raise VoiceDownloadError(
