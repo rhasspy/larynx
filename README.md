@@ -1,3 +1,9 @@
+# Larynx has been succeeded by [Piper](https://github.com/rhasspy/piper)!
+
+This repository is no longer actively developed.
+
+---
+
 # Larynx
 
 🎥 [DEMO VIDEO](https://www.youtube.com/watch?v=hBmhDf8cl0k)
