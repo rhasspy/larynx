@@ -618,8 +618,10 @@ def _signal_handler(*_: typing.Any) -> None:
     """Signal shutdown to Hypercorn"""
     shutdown_event.set()
 
-
-_LOOP.add_signal_handler(signal.SIGTERM, _signal_handler)
+try:
+    _LOOP.add_signal_handler(signal.SIGTERM, _signal_handler)
+except NotImplementedError:
+    pass
 
 try:
     if args.pidfile:
