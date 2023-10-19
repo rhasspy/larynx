@@ -10,3 +10,4 @@ quart-cors~=0.5.0
 swagger-ui-py~=21.9.28
 torch~=1.8.0
 tqdm~=4.48.2
+Jinja2==3.0.3
